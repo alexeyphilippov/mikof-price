@@ -1,0 +1,62 @@
+# Продакшн-надстройка (применяется на mikofai.ru):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Добавляет nginx+SSL, мониторинг (Grafana/Loki/Fluent Bit) и бэкапы БД.
+services:
+  backend:
+    command: sh -c "python -m scripts.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports: []
+
+  frontend:
+    ports: []
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    depends_on: [backend, frontend, grafana]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./cert:/etc/nginx/certs:ro
+      - certbot_www:/var/www/certbot
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: always
+    env_file: .env
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: https://mikofai.ru/bi
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  loki:
+    image: grafana/loki:3.2.0
+    restart: always
+    command: -config.file=/etc/loki/local-config.yaml
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.1
+    restart: always
+    depends_on: [loki]
+    volumes:
+      - ./docker/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+
+  backup:
+    image: postgres:16-alpine
+    restart: always
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pg_backups:/backups
+      - ./docker/backup/backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "-c", "while true; do sh /backup.sh; sleep 86400; done"]
+
+volumes:
+  grafana_data:
+  certbot_www:
