@@ -13,4 +13,9 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    host: true,
+    port: 5173,
+    allowedHosts: ["mikofai.ru", "www.mikofai.ru"],
+  },
 });

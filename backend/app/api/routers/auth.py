@@ -1,9 +1,12 @@
+import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 
 from app.core.db import get_db
+from app.core.config import settings
+from app.core.ratelimit import limiter
 from app.models.models import User, RefreshToken
 from app.auth.auth import (
     verify_password, create_access_token, create_refresh_token, hash_token
@@ -15,6 +18,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login")
+@limiter.limit(settings.login_rate_limit)
 async def login(
     body: LoginRequest,
     response: Response,
@@ -41,8 +45,10 @@ async def login(
     )
     await db.commit()
 
-    response.set_cookie("access_token", access, httponly=True, samesite="lax")
-    response.set_cookie("refresh_token", raw_refresh, httponly=True, samesite="lax")
+    secure = settings.cookie_secure
+    response.set_cookie("access_token", access, httponly=True, samesite="lax", secure=secure)
+    response.set_cookie("refresh_token", raw_refresh, httponly=True, samesite="lax", secure=secure)
+    response.set_cookie("XSRF-TOKEN", secrets.token_urlsafe(32), httponly=False, samesite="lax", secure=secure)
     await log_action(db, user.id, "login", ip=request.client.host)
     return {"ok": True}
 
@@ -70,6 +76,7 @@ async def logout(
             await db.commit()
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
+    response.delete_cookie("XSRF-TOKEN")
     return {"ok": True}
 
 
@@ -95,7 +102,7 @@ async def refresh(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     access = create_access_token(user.id, user.role.value)
-    response.set_cookie("access_token", access, httponly=True, samesite="lax")
+    response.set_cookie("access_token", access, httponly=True, samesite="lax", secure=settings.cookie_secure)
     return {"ok": True}
 
 

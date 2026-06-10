@@ -22,6 +22,9 @@ def _client(role: str) -> httpx.Client:
     c = httpx.Client(base_url=BASE, timeout=15)
     r = c.post("/api/auth/login", json={"email": email, "password": password})
     assert r.status_code == 200, f"login {role} failed: {r.text}"
+    token = c.cookies.get("XSRF-TOKEN")
+    if token:
+        c.headers["X-XSRF-TOKEN"] = token
     return c
 
 

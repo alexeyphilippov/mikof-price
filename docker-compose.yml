@@ -40,6 +40,7 @@ services:
       SMTP_PORT: ${SMTP_PORT}
       SMTP_LOGIN: ${SMTP_LOGIN}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM:-noreply@mikofai.ru}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
       interval: 30s

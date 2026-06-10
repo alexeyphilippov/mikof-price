@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     admin_password: str
     seed_password: str
     mailer_url: str = "http://mailer:8001"
+    cookie_secure: bool = False
+    cors_origins: str = "http://localhost:5173"
+    login_rate_limit: str = "5/minute"
 
     class Config:
         env_file = ".env"
