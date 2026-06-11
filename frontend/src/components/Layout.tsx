@@ -1,10 +1,10 @@
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, ROLE_NAMES, Role } from "../api/client";
 import { useAuth } from "../lib/auth";
 
 const NAV: { to: string; label: string; roles?: Role[] }[] = [
-  { to: "/", label: "Дашборд" },
   { to: "/services", label: "Услуги" },
   { to: "/packages", label: "Пакеты" },
   { to: "/requests", label: "Заявки", roles: ["r1", "r2", "r3"] },
@@ -17,6 +17,7 @@ const NAV: { to: string; label: string; roles?: Role[] }[] = [
 export default function Layout() {
   const { me, logout } = useAuth();
   const nav = useNavigate();
+  const [open, setOpen] = useState(false);
 
   const { data: pending } = useQuery({
     queryKey: ["pending"],
@@ -32,20 +33,27 @@ export default function Layout() {
 
   if (!me) return null;
 
+  const close = () => setOpen(false);
+
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <div className="mobile-bar">
+        <button className="burger" aria-label="Меню" onClick={() => setOpen(true)}>☰</button>
+        <div className="brand">mikof<span>ai</span></div>
+      </div>
+      {open && <div className="backdrop" onClick={close} />}
+      <aside className={`sidebar${open ? " open" : ""}`}>
         <div className="brand">mikof<span>ai</span></div>
         <nav>
           {NAV.filter((n) => !n.roles || n.roles.includes(me.role)).map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.to === "/"}>
+            <NavLink key={n.to} to={n.to} onClick={close}>
               <span>{n.label}</span>
               {n.to === "/requests" && pending ? <span className="badge">{pending}</span> : null}
             </NavLink>
           ))}
         </nav>
         <div className="spacer" />
-        <NavLink to="/profile" className="user">
+        <NavLink to="/profile" className="user" onClick={close}>
           <div>{me.name}</div>
           <div className="role">{ROLE_NAMES[me.role]}</div>
         </NavLink>

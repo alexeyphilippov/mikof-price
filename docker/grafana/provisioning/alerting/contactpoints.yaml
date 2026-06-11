@@ -1,0 +1,11 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: email-admin
+    receivers:
+      - uid: email_admin
+        type: email
+        settings:
+          addresses: filippov.ao@phystech.edu
+          singleEmail: true

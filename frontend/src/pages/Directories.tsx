@@ -140,7 +140,7 @@ export default function Directories() {
   return (
     <>
       <div className="topbar"><h1>Справочники</h1></div>
-      <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      <div className="grid cols-2">
         <RefTable title="Группы услуг" url="/api/groups" entity="group" hasNameRo />
         <RefTable title="Подгруппы услуг" url="/api/subgroups" entity="subgroup" hasNameRo />
         <RefTable title="Исполнители" url="/api/executors" entity="executor" hasNameRo={false} />

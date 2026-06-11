@@ -3,7 +3,6 @@ import { useAuth } from "./lib/auth";
 import { Role } from "./api/client";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
 import Packages from "./pages/Packages";
@@ -33,7 +32,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={me ? <Navigate to="/" replace /> : <Login />} />
       <Route element={<Guard><Layout /></Guard>}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Navigate to="/services" replace />} />
         <Route path="/services" element={<Services />} />
         <Route path="/services/:id" element={<ServiceDetail />} />
         <Route path="/packages" element={<Packages />} />

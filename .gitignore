@@ -22,3 +22,5 @@ tz_text.txt
 test-results/
 playwright-report/
 .pytest_cache/
+*.tsbuildinfo
+*.jfif

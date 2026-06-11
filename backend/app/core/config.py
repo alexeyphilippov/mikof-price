@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cors_origins: str = "http://localhost:5173"
     login_rate_limit: str = "5/minute"
+    app_base_url: str = "https://mikofai.ru"
 
     class Config:
         env_file = ".env"

@@ -41,9 +41,9 @@ export default function Users() {
                 <tr key={u.id}>
                   <td>{u.email}</td><td>{u.name}</td><td>{ROLE_NAMES[u.role]}</td>
                   <td><span className={`pill ${u.is_active ? "active" : "inactive"}`}>{u.is_active ? "Да" : "Нет"}</span></td>
-                  <td><div className="row" style={{ gap: 4 }}>
-                    <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => toggle.mutate(u)}>{u.is_active ? "Деактивировать" : "Активировать"}</button>
-                    <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => openPw(u)}>Сменить пароль</button>
+                  <td><div className="cell-actions">
+                    <button className="ghost" onClick={() => toggle.mutate(u)}>{u.is_active ? "Деактивировать" : "Активировать"}</button>
+                    <button className="ghost" onClick={() => openPw(u)}>Сменить пароль</button>
                   </div></td>
                 </tr>
               ))}

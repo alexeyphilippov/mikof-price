@@ -25,6 +25,7 @@ class Mail(BaseModel):
     to: list[str]
     subject: str
     body: str
+    html: str | None = None
 
 
 @app.get("/health")
@@ -39,6 +40,8 @@ def send(mail: Mail):
     msg["To"] = ", ".join(mail.to)
     msg["Subject"] = mail.subject
     msg.set_content(mail.body)
+    if mail.html:
+        msg.add_alternative(mail.html, subtype="html")
     try:
         # Провайдер (selcloud) использует самоподписанный сертификат на порту 1127
         ctx = ssl._create_unverified_context()  # noqa: SLF001

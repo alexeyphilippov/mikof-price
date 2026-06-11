@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, Cookie, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -49,3 +52,21 @@ async def log_action(
         ip=ip,
     ))
     await db.commit()
+    _emit_audit_log(user_id, action, entity_type, entity_id, ip)
+
+
+def _emit_audit_log(user_id, action, entity_type, entity_id, ip):
+    """Дублируем событие в /logs/audit.log для сбора Fluent Bit → Loki → Grafana (Н6)."""
+    try:
+        line = json.dumps({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "action": action,
+            "user_id": user_id,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "ip": ip,
+        }, ensure_ascii=False)
+        with open("/logs/audit.log", "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass

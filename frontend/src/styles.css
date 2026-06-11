@@ -55,12 +55,18 @@ h1, h2, h3 { margin: 0 0 0.5em; }
 
 .card { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
 .grid { display: grid; gap: 16px; }
+.grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
-.grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
 
 .stat { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; }
 .stat .n { font-size: 30px; font-weight: 700; }
 .stat .l { color: var(--muted); font-size: 13px; }
+
+.metrics { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+.metrics .stat { flex: 1 1 0; min-width: 120px; padding: 12px 16px; cursor: pointer; border: 2px solid transparent; user-select: none; transition: border-color .15s; }
+.metrics .stat:hover { border-color: var(--line); }
+.metrics .stat.active { border-color: var(--brand); background: #f5f9ff; }
+.metrics .stat .n { font-size: 24px; }
 
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
@@ -84,6 +90,8 @@ button, .btn {
 button:hover, .btn:hover { background: var(--brand-dark); }
 button.ghost { background: transparent; color: var(--brand); border: 1px solid var(--line); }
 button.ghost:hover { background: #eef3fc; }
+button.link { background: transparent; color: var(--brand); border: 0; padding: 0; font-weight: 600; text-decoration: underline; }
+button.link:hover { background: transparent; color: var(--brand-dark); }
 button.danger { background: var(--red); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -129,3 +137,77 @@ th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover { color: var(--ink); }
 .framed { border: 2px solid var(--brand); border-radius: var(--radius); padding: 4px 20px 16px; margin-bottom: 22px; background: #f5f9ff; }
 .framed > h3 { color: var(--brand); margin-top: 14px; }
+
+/* Группа кнопок действий в ячейке таблицы — переносится, не вылезает за границы */
+.cell-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.cell-actions button { flex: 0 0 auto; padding: 7px 10px; font-size: 13px; }
+
+/* Мобильная шапка с бургером и затемнение — только на узких экранах */
+.mobile-bar { display: none; }
+.backdrop { display: none; }
+
+/* ── Адаптив: планшеты, iPhone 13 Pro Max (428×926 портрет, 926×428 ландшафт) ── */
+@media (max-width: 960px) {
+  html, body { overflow-x: clip; }
+  .layout { flex-direction: column; align-items: stretch; }
+
+  .mobile-bar {
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 50;
+    background: var(--ink); padding: 10px 14px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .mobile-bar .brand { color: #fff; font-weight: 700; font-size: 18px; padding: 0; }
+  .mobile-bar .brand span { color: var(--brand); }
+  .burger {
+    background: transparent; border: 0; color: #fff; font-size: 22px;
+    line-height: 1; padding: 4px 8px; border-radius: 8px; font-weight: 400;
+  }
+  .burger:hover { background: rgba(255,255,255,.12); }
+
+  .sidebar {
+    position: fixed; left: 0; top: 0; height: 100vh; width: 260px;
+    transform: translateX(-100%); transition: transform .2s ease; z-index: 60;
+  }
+  .sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.45); }
+  .backdrop { display: block; position: fixed; inset: 0; background: rgba(15,22,40,.5); z-index: 55; }
+
+  .main {
+    padding: 16px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .topbar { flex-wrap: wrap; gap: 10px; }
+
+  /* Сетки — в одну колонку, карточки "span 2" на всю ширину */
+  .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
+  .card[style*="span 2"], .card[style*="span2"] { grid-column: 1 / -1 !important; }
+
+  /* Широкие таблицы скроллятся внутри карточки; ячейки не дробятся по буквам */
+  .card, .framed { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: auto; min-width: 100%; }
+  th, td { padding: 8px 10px; word-break: normal; overflow-wrap: normal; }
+  /* Первый столбец (код/ID/дата) — в одну строку */
+  th:first-child, td:first-child { white-space: nowrap; }
+  /* Кнопки, статусы и пилюли держим в одну строку (не ломаем по буквам) */
+  button, .btn, a.btn, .pill, .badge { white-space: nowrap; }
+  .cell-actions { flex-wrap: nowrap; }
+
+  /* Тулбары и строки кнопок переносятся */
+  .toolbar { flex-wrap: wrap; }
+  .toolbar input, .toolbar select { width: 100%; min-width: 0; flex: 1 1 160px; }
+  .row { flex-wrap: wrap; }
+
+  .login-wrap { padding: 16px; }
+  .login-card { width: 100%; max-width: 380px; }
+}
+
+@media (max-width: 480px) {
+  .main { padding: 12px; }
+  .card { padding: 16px; }
+  table { font-size: 13px; }
+  .attr-grid { grid-template-columns: 110px 1fr; }
+  .modal { padding: 18px; }
+  .row > * { flex-basis: 100%; }
+}

@@ -26,6 +26,7 @@ from app.models.models import (
     UserRole,
 )
 from app.services.notify import send_mail
+from app.services.request_email import render_approval_email
 from app.schemas.schemas import (
     ChangeRequestCreate,
     ChangeRequestOut,
@@ -225,9 +226,9 @@ async def submit_request(
     db.add(RequestHistory(request_id=id, from_status=old, to_status=req.status.value, actor_id=user.id))
     await db.commit()
     await db.refresh(req)
-    # Ф5: уведомить следующего согласующего
-    bg.add_task(send_mail, await _emails_by_role(db, notify_role),
-                f"Новая заявка №{req.id} на согласование", f"Заявка «{req.title}» ожидает рассмотрения.")
+    # Ф5: уведомить следующего согласующего — интерактивное HTML-письмо
+    subject, text, html = await render_approval_email(db, req)
+    bg.add_task(send_mail, await _emails_by_role(db, notify_role), subject, text, html)
     return req
 
 
@@ -259,8 +260,13 @@ async def approve_request(
     await db.commit()
     await db.refresh(req)
     await log_action(db, user.id, "approve_request", "change_request", id)
-    bg.add_task(send_mail, recipients, f"Заявка №{req.id}: статус {req.status.value}",
-                f"Заявка «{req.title}» переведена в статус {req.status.value}.")
+    if req.status == RequestStatus.pending_ceo:
+        # R2 согласовал → заявка ушла гендиректору: интерактивное HTML-письмо
+        subject, text, html = await render_approval_email(db, req)
+        bg.add_task(send_mail, recipients, subject, text, html)
+    else:
+        bg.add_task(send_mail, recipients, f"Заявка №{req.id}: статус {req.status.value}",
+                    f"Заявка «{req.title}» переведена в статус {req.status.value}.")
     return req
 
 

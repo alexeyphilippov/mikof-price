@@ -5,8 +5,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 async function login(page: Page, email: string, password: string) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Пароль").fill(password);
+  await page.locator('input[type="email"]').fill(email);
+  await page.locator('input[type="password"]').fill(password);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByRole("button", { name: "Выйти" })).toBeVisible();
 }
@@ -15,8 +15,9 @@ test.skip(!ADMIN_PASSWORD, "Set ADMIN_PASSWORD env var to run E2E tests");
 
 test("R1 видит все разделы и кнопку выхода (зам.14)", async ({ page }) => {
   await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  const sidebar = page.locator(".sidebar nav");
   for (const nav of ["Услуги", "Пакеты", "Заявки", "Справочники", "Клиники", "Пользователи", "Аудит"]) {
-    await expect(page.getByRole("link", { name: nav })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: nav })).toBeVisible();
   }
 });
 

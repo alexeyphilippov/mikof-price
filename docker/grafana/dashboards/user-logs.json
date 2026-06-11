@@ -1,0 +1,71 @@
+{
+  "uid": "mikofai-user-logs",
+  "title": "Mikofai — Логи событий и доступность",
+  "tags": ["mikofai"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "События пользователей (по типам)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (action) (count_over_time({job=\"mikofai\", stream=\"audit\"} | json [$__interval]))",
+          "legendFormat": "{{action}}",
+          "datasource": { "type": "loki", "uid": "loki" }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Логи действий пользователей",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 8 },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"mikofai\", stream=\"audit\"}",
+          "datasource": { "type": "loki", "uid": "loki" }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Health-check: неуспешные пробы (status=down)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"mikofai\", stream=\"health\"} |~ \"status=down\" [$__interval]))",
+          "legendFormat": "down",
+          "datasource": { "type": "loki", "uid": "loki" }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Health-check лог",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"mikofai\", stream=\"health\"}",
+          "datasource": { "type": "loki", "uid": "loki" }
+        }
+      ]
+    }
+  ]
+}

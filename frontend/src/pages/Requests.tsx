@@ -1,14 +1,19 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, ChangeRequest, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import SortableTable, { Column } from "../components/SortableTable";
 
+const METRICS = ["pending_cfd", "pending_ceo", "revision", "approved"];
+
 export default function Requests() {
   const { me } = useAuth();
   const { data } = useQuery({ queryKey: ["requests"], queryFn: async () => (await api.get<ChangeRequest[]>("/api/requests")).data });
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const rows = data ?? [];
+  const by = (s: string) => rows.filter((r) => r.status === s).length;
 
   // Заявки, ожидающие действия текущей роли (зам.7)
   const mine = rows.filter((r) =>
@@ -26,11 +31,29 @@ export default function Requests() {
     { key: "updated", label: "Обновлена", value: (r) => Date.parse(r.updated_at), render: (r) => <span className="muted">{new Date(r.updated_at).toLocaleString("ru")}</span> },
   ];
 
+  const tableRows = statusFilter ? rows.filter((r) => r.status === statusFilter) : rows;
+
   return (
     <>
       <div className="topbar">
         <h1>Заявки на изменение</h1>
         {me!.role === "r3" && <Link className="btn" to="/requests/new">Новая заявка</Link>}
+      </div>
+
+      <div className="metrics">
+        {METRICS.map((s) => (
+          <div
+            key={s}
+            role="button"
+            tabIndex={0}
+            className={`stat${statusFilter === s ? " active" : ""}`}
+            onClick={() => setStatusFilter(statusFilter === s ? null : s)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setStatusFilter(statusFilter === s ? null : s); }}
+          >
+            <div className="n">{by(s)}</div>
+            <div className="l">{STATUS_NAMES[s]}</div>
+          </div>
+        ))}
       </div>
 
       {me!.role !== "r4" && (
@@ -58,10 +81,18 @@ export default function Requests() {
       )}
 
       <div className="card">
-        <h3>Все заявки</h3>
+        <h3>
+          Все заявки
+          {statusFilter && (
+            <span className="muted" style={{ fontWeight: 400, fontSize: 14, marginLeft: 8 }}>
+              · фильтр: {STATUS_NAMES[statusFilter]}{" "}
+              <button className="link" onClick={() => setStatusFilter(null)}>сбросить</button>
+            </span>
+          )}
+        </h3>
         <SortableTable
           columns={columns}
-          rows={rows}
+          rows={tableRows}
           rowKey={(r) => r.id}
           initialSort={{ key: "updated", dir: "desc" }}
           emptyText="Заявок нет"

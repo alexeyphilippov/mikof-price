@@ -1,0 +1,107 @@
+{
+  "uid": "mikofai-user-activity",
+  "title": "Mikofai — Активность пользователей",
+  "tags": ["mikofai"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Входов за период",
+      "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS value FROM audit_log WHERE action='login' AND $__timeFilter(created_at)",
+          "datasource": { "type": "postgres", "uid": "mikofai_pg" }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Всего действий за период",
+      "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS value FROM audit_log WHERE $__timeFilter(created_at)",
+          "datasource": { "type": "postgres", "uid": "mikofai_pg" }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "piechart",
+      "title": "Действия по типам",
+      "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT action AS metric, count(*) AS value FROM audit_log WHERE $__timeFilter(created_at) GROUP BY action ORDER BY value DESC",
+          "datasource": { "type": "postgres", "uid": "mikofai_pg" }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Действия во времени (по типам)",
+      "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 5 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(created_at,'1h'), action AS metric, count(*) AS value FROM audit_log WHERE $__timeFilter(created_at) GROUP BY 1, action ORDER BY 1",
+          "datasource": { "type": "postgres", "uid": "mikofai_pg" }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Самые активные пользователи",
+      "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT u.name AS \"Пользователь\", u.role AS \"Роль\", count(*) AS \"Действий\" FROM audit_log a JOIN users u ON u.id=a.user_id WHERE $__timeFilter(a.created_at) GROUP BY u.name, u.role ORDER BY 3 DESC",
+          "datasource": { "type": "postgres", "uid": "mikofai_pg" }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Заявки по статусам",
+      "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT status AS \"Статус\", count(*) AS \"Кол-во\" FROM change_requests GROUP BY status ORDER BY 2 DESC",
+          "datasource": { "type": "postgres", "uid": "mikofai_pg" }
+        }
+      ]
+    }
+  ]
+}

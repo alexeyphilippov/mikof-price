@@ -59,11 +59,11 @@
 | ТЗ | Требование | Статус | Комментарий |
 |----|------------|--------|-------------|
 | Н1 | 100 одновременных пользователей | 🟡 | async-стек поддерживает; нагрузочный тест не проводился |
-| Н2 | OWASP / HTTPS / CSRF / rate-limit / bcrypt / нет секретов в git | 🟡 | **bcrypt ✅, секретов в git нет ✅**; HTTPS/SSL — prod-оверлей; **CSRF и rate-limit на login пока не реализованы** (бэклог) |
+| Н2 | OWASP / HTTPS / CSRF / rate-limit / bcrypt / нет секретов в git | ✅ | bcrypt, CSRF (double-submit), rate-limit на `/login`, HTTPS/SSL (prod), секретов в git нет |
 | Н3 | БД в Docker + бэкапы (30 дней) | ✅ | `docker-compose.prod.yml` + `docker/backup` |
 | Н4 | Все сервисы в контейнерах, `restart: always` | ✅ | `docker-compose.yml` |
-| Н5 | Health checks + email-алерты | 🟡 | health checks ✅; email-алерты — prod |
-| Н6 | Grafana + Fluent Bit на `/bi` (только админ) | ✅ | prod-оверлей (Loki + Fluent Bit + Grafana) |
+| Н5 | Health checks + email-алерты | ✅ | health checks + сервис `healthcheck` → Loki; Grafana alert → email (SMTP Selectel) |
+| Н6 | Grafana + Fluent Bit на `/bi` (только админ) | ✅ | Loki + Fluent Bit + Grafana, datasources/дашборды/алерты в provisioning |
 | Н7 | Логин/пароль администратора в ENV | ✅ | `.env`, обязательные поля в `config.py` |
 | Н8 | Почтовый сервис — отдельный контейнер | ✅ | `mailer/` |
 
@@ -102,7 +102,6 @@
 
 ## 7. Известные пробелы (бэклог)
 
-1. **Н2** — CSRF-защита и rate-limiting на `/api/auth/login` не реализованы.
-2. **Н1** — нет нагрузочного теста на 100 пользователей.
-3. **HTTPS/SSL, Grafana, email-алерты** — только в `docker-compose.prod.yml`, проверяются после деплоя.
-4. История изменений (`entity_history`) ведётся для услуг/пакетов; для части справочников — через заявки/аудит.
+1. **Н1** — нет нагрузочного теста на 100 пользователей.
+2. Alert по доступности — на уровне всей системы (нет успешного health-check за 5 мин); по-сервисный алерт можно добавить, разложив `service` в метку Loki.
+3. История изменений (`entity_history`) ведётся для услуг/пакетов; для части справочников — через заявки/аудит.
