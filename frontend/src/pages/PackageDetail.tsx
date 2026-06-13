@@ -144,7 +144,7 @@ function PackagePrice({ clinics, prices, packageId, canWrite, onSave }: {
       <table>
         <thead><tr><th>Клиника</th><th>Расчёт</th>{canWrite && <th>Фикс.</th>}</tr></thead>
         <tbody>
-          {clinics.map((c) => (
+          {clinics.filter((c) => c.status === "active").map((c) => (
             <PriceRow key={c.id} packageId={packageId} clinic={c}
               fixed={prices.find((pr) => pr.clinic_id === c.id)?.price_fixed ?? null}
               canWrite={canWrite} onSave={onSave} />

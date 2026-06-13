@@ -20,7 +20,6 @@ function RefTable({ title, url, entity, hasNameRo }: { title: string; url: strin
   const role = me!.role;
   const viaRequest = role !== "r1";
   const canWrite = role === "r1" || role === "r3";
-  const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState(EMPTY);
   const [archiveTarget, setArchiveTarget] = useState<Ref | null>(null);
@@ -34,12 +33,6 @@ function RefTable({ title, url, entity, hasNameRo }: { title: string; url: strin
 
   const refresh = (reqId: number | null) => { qc.invalidateQueries({ queryKey: [url] }); if (reqId) nav(`/requests/${reqId}`); };
   const body = (f: typeof EMPTY) => (hasNameRo ? { code: f.code, name_ru: f.name_ru, name_ro: f.name_ro } : { code: f.code, name_ru: f.name_ru });
-
-  const create = useMutation({
-    mutationFn: async () => submitEntityChange(role, async () => { await api.post(url, body(form)); },
-      { title: `Создание: ${form.code}`, items: [{ entity_type: `${entity}_create`, field_name: "create", old_value: null, new_value: body(form) }] }),
-    onSuccess: (reqId) => { setForm(EMPTY); refresh(reqId); },
-  });
 
   const saveEdit = useMutation({
     mutationFn: async () => {
@@ -100,15 +93,6 @@ function RefTable({ title, url, entity, hasNameRo }: { title: string; url: strin
           ))}
         </tbody>
       </table>
-      {canWrite && <div className="row" style={{ marginTop: 12, alignItems: "flex-end" }}>
-        <div><label>Код</label><input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
-        <div><label>Название (RU)</label><input value={form.name_ru} onChange={(e) => setForm({ ...form, name_ru: e.target.value })} /></div>
-        {hasNameRo && <div><label>Название (RO)</label><input value={form.name_ro} onChange={(e) => setForm({ ...form, name_ro: e.target.value })} /></div>}
-        <button style={{ flex: "0 0 auto" }} disabled={!form.code || !form.name_ru || create.isPending} onClick={() => create.mutate()}>
-          {viaRequest ? "Через заявку" : "Добавить"}
-        </button>
-      </div>}
-
       {archiveTarget && (
         <ConfirmDialog
           title={`${archiving ? "Архивировать" : "Разархивировать"}: ${archiveTarget.code}`}

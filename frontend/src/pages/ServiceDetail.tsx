@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Price, Ref, Service, STATUS_NAMES } from "../api/client";
@@ -179,7 +179,7 @@ export default function ServiceDetail() {
             <table>
               <thead><tr><th>Клиника</th><th>Цена</th><th>Online</th><th>Спец.</th>{canEditFin && <th></th>}</tr></thead>
               <tbody>
-                {(clinics ?? []).map((c) => {
+                {(clinics ?? []).filter((c) => c.status === "active").map((c) => {
                   const p = prices?.find((x) => x.clinic_id === c.id);
                   return (
                     <ServicePriceRow
@@ -220,24 +220,32 @@ function ServicePriceRow({ clinic, price, canEdit, pending, onSave }: {
   clinic: Ref; price?: Price; canEdit: boolean; pending: boolean;
   onSave: (price: number, priceOnline?: number) => void;
 }) {
-  const [val, setVal] = useState(price?.price != null ? String(price.price) : "");
-  const [online, setOnline] = useState(price?.price_online != null ? String(price.price_online) : "");
+  const [val, setVal] = useState("");
+  const [online, setOnline] = useState("");
+  useEffect(() => {
+    setVal(price?.price != null ? String(price.price) : "");
+    setOnline(price?.price_online != null ? String(price.price_online) : "");
+  }, [price?.price, price?.price_online]);
+  if (!canEdit) {
+    return (
+      <tr>
+        <td>{clinic.name_ru}</td>
+        <td>{price?.price ?? "—"} {price?.currency ?? "MDL"}</td>
+        <td>{price?.price_online ?? "—"}</td>
+        <td>{price?.price_special ?? "—"}</td>
+      </tr>
+    );
+  }
   return (
     <tr>
       <td>{clinic.name_ru}</td>
-      <td>{price?.price ?? "—"} {price?.currency ?? "MDL"}</td>
-      <td>{price?.price_online ?? "—"}</td>
+      <td><input type="number" value={val} onChange={(e) => setVal(e.target.value)} placeholder="Цена" style={{ maxWidth: 90 }} /></td>
+      <td><input type="number" value={online} onChange={(e) => setOnline(e.target.value)} placeholder="Online" style={{ maxWidth: 90 }} /></td>
       <td>{price?.price_special ?? "—"}</td>
-      {canEdit && (
-        <td>
-          <div className="row" style={{ gap: 4 }}>
-            <input type="number" value={val} onChange={(e) => setVal(e.target.value)} placeholder="Цена" style={{ maxWidth: 90 }} />
-            <input type="number" value={online} onChange={(e) => setOnline(e.target.value)} placeholder="Online" style={{ maxWidth: 90 }} />
-            <button className="ghost" style={{ flex: "0 0 auto" }} disabled={!val || pending}
-              onClick={() => onSave(Number(val), online ? Number(online) : undefined)}>OK</button>
-          </div>
-        </td>
-      )}
+      <td>
+        <button className="ghost" style={{ flex: "0 0 auto" }} disabled={!val || pending}
+          onClick={() => onSave(Number(val), online ? Number(online) : undefined)}>OK</button>
+      </td>
     </tr>
   );
 }

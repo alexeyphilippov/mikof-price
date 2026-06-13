@@ -1,7 +1,19 @@
 from __future__ import annotations
+import re
 from datetime import datetime
 from typing import Optional, Any
 from pydantic import BaseModel, EmailStr, field_validator
+
+_PHONE_RE = re.compile(r"^[+\d][\d\s()\-]{4,}$")
+_CODE_RE = re.compile(r"^[A-Z]-\d{3}-[A-Z:]+-\d{3}$")
+_CYR = re.compile(r"[А-Яа-яЁё]")
+_LAT = re.compile(r"[A-Za-z]")
+
+
+def _validate_phone(v: Optional[str]) -> Optional[str]:
+    if v and not _PHONE_RE.match(v):
+        raise ValueError("Телефон может содержать только цифры, пробелы и + - ( )")
+    return v
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -114,6 +126,8 @@ class ClinicCreate(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
 
+    _phone = field_validator("phone")(lambda cls, v: _validate_phone(v))
+
 
 class ClinicUpdate(BaseModel):
     name_ru: Optional[str] = None
@@ -121,6 +135,8 @@ class ClinicUpdate(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     status: Optional[str] = None
+
+    _phone = field_validator("phone")(lambda cls, v: _validate_phone(v))
 
 
 # ── Цены ─────────────────────────────────────────────────────────────────────
@@ -180,6 +196,27 @@ class ServiceCreate(BaseModel):
     additional_service_id: Optional[int] = None
     is_surgery_addon: bool = False
     note: Optional[str] = None
+
+    @field_validator("code")
+    @classmethod
+    def _check_code(cls, v: str) -> str:
+        if not _CODE_RE.match(v):
+            raise ValueError("Код должен иметь формат G-001-CON-001")
+        return v
+
+    @field_validator("name_ru")
+    @classmethod
+    def _check_ru(cls, v: str) -> str:
+        if _LAT.search(v) and not _CYR.search(v):
+            raise ValueError("Название (RU) должно быть на русском языке")
+        return v
+
+    @field_validator("name_ro")
+    @classmethod
+    def _check_ro(cls, v: Optional[str]) -> Optional[str]:
+        if v and _CYR.search(v):
+            raise ValueError("Название (RO) должно быть на латинице")
+        return v
 
 
 class ServiceUpdate(BaseModel):
