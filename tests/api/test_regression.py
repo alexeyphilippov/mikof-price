@@ -31,6 +31,39 @@ def test_rbac_r4_cannot_list_requests(r4):
     assert r4.get("/api/requests").status_code in (401, 403)
 
 
+def test_rbac_r2_cannot_request_service_duration(r2):
+    sid = _first_service_id(r2)
+    payload = {
+        "title": "r2 forbidden",
+        "items": [{"entity_type": "service", "entity_id": sid,
+                   "field_name": "duration_min", "old_value": {"v": "14"}, "new_value": {"v": "15"}}],
+    }
+    assert r2.post("/api/requests", json=payload).status_code == 403
+
+
+def test_rbac_r2_can_request_service_price(r2):
+    sid = _first_service_id(r2)
+    clinics = r2.get("/api/clinics").json()
+    assert clinics
+    payload = {
+        "title": "r2 price",
+        "items": [{"entity_type": "service_price", "entity_id": sid, "field_name": "price",
+                   "old_value": None, "new_value": {"service_id": sid, "clinic_id": clinics[0]["id"], "price": 100}}],
+    }
+    assert r2.post("/api/requests", json=payload).status_code == 200
+
+
+def test_rbac_r3_cannot_request_service_price(r3):
+    sid = _first_service_id(r3)
+    clinics = r3.get("/api/clinics").json()
+    payload = {
+        "title": "r3 forbidden price",
+        "items": [{"entity_type": "service_price", "entity_id": sid, "field_name": "price",
+                   "old_value": None, "new_value": {"service_id": sid, "clinic_id": clinics[0]["id"], "price": 100}}],
+    }
+    assert r3.post("/api/requests", json=payload).status_code == 403
+
+
 # --- WORKFLOW ---
 
 def test_workflow_r3_request_full_cycle(r1, r2, r3):

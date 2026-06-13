@@ -40,6 +40,35 @@ from app.schemas.schemas import (
 
 router = APIRouter(prefix="/api/requests", tags=["requests"])
 
+R2_FINANCIAL = frozenset({"service_price", "package_price", "package_item_add", "package_item_remove"})
+R3_MEDICAL_TYPES = frozenset({
+    "service", "package", "service_create", "package_create",
+    "group", "subgroup", "executor", "location", "clinic",
+    "group_create", "subgroup_create", "executor_create", "location_create", "clinic_create",
+})
+R3_SERVICE_FIELDS = frozenset({
+    "name_ru", "name_ro", "duration_min", "note", "group_id", "subgroup_id", "executor_id", "location_id", "status",
+})
+R3_PACKAGE_FIELDS = frozenset({"name_ru", "name_ro", "status"})
+
+
+def _assert_items_allowed(role: UserRole, items: list[dict]) -> None:
+    for item in items:
+        et = item.get("entity_type", "")
+        fn = item.get("field_name", "")
+        if role == UserRole.r2:
+            if et not in R2_FINANCIAL:
+                raise HTTPException(403, f"Тип изменения «{et}» недоступен финансовому директору")
+        elif role == UserRole.r3:
+            if et in R2_FINANCIAL:
+                raise HTTPException(403, f"Тип изменения «{et}» недоступен медицинскому директору")
+            if et not in R3_MEDICAL_TYPES:
+                raise HTTPException(403, f"Тип изменения «{et}» недоступен медицинскому директору")
+            if et == "service" and fn not in R3_SERVICE_FIELDS:
+                raise HTTPException(403, f"Поле «{fn}» недоступно для изменения услуги")
+            if et == "package" and fn not in R3_PACKAGE_FIELDS:
+                raise HTTPException(403, f"Поле «{fn}» недоступно для изменения пакета")
+
 
 def _item_value(item: ChangeRequestItem):
     return item.r2_override_value if item.r2_override_value is not None else item.new_value
@@ -191,6 +220,7 @@ async def create_request(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles(UserRole.r2, UserRole.r3)),
 ):
+    _assert_items_allowed(user.role, body.items)
     req = ChangeRequest(title=body.title, note=body.note, author_id=user.id)
     db.add(req)
     await db.flush()

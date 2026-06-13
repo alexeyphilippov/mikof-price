@@ -22,6 +22,7 @@ export default function Clinics() {
   const qc = useQueryClient();
   const role = me!.role;
   const viaRequest = role !== "r1";
+  const canWrite = role === "r1" || role === "r3";
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState(EMPTY);
@@ -75,7 +76,7 @@ export default function Clinics() {
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: "span 2" }}>
           <table>
-            <thead><tr><th>Код</th><th>Название</th><th>Адрес</th><th>Статус</th><th></th></tr></thead>
+            <thead><tr><th>Код</th><th>Название</th><th>Адрес</th><th>Статус</th>{canWrite && <th></th>}</tr></thead>
             <tbody>
               {data?.map((c) => editId === c.id ? (
                 <tr key={c.id}>
@@ -92,16 +93,16 @@ export default function Clinics() {
                 <tr key={c.id}>
                   <td>{c.code}</td><td>{c.name_ru}</td><td className="muted">{c.address || "—"}</td>
                   <td><span className={`pill ${c.status === "active" ? "active" : "inactive"}`}>{c.status === "active" ? "Активна" : "Закрыта"}</span></td>
-                  <td><div className="row" style={{ gap: 4 }}>
+                  {canWrite && <td><div className="row" style={{ gap: 4 }}>
                     <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => { setEditId(c.id); setEditForm({ code: c.code, name_ru: c.name_ru, name_ro: c.name_ro ?? "", address: c.address ?? "", phone: c.phone ?? "" }); }}>Изм.</button>
                     <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setArchiveTarget(c)}>{c.status === "active" ? "Закрыть" : "Открыть"}</button>
-                  </div></td>
+                  </div></td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="card">
+        {canWrite && <div className="card">
           <h3>Новая клиника {viaRequest && <span className="tag">(заявка)</span>}</h3>
           {FIELDS.map(({ k, label }) => (
             <div className="field" key={k}>
@@ -112,7 +113,7 @@ export default function Clinics() {
           <button style={{ width: "100%" }} disabled={!form.code || !form.name_ru || create.isPending} onClick={() => create.mutate()}>
             {viaRequest ? "Через заявку" : "Добавить"}
           </button>
-        </div>
+        </div>}
       </div>
 
       {archiveTarget && (

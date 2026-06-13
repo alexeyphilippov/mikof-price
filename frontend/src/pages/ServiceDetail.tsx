@@ -18,8 +18,9 @@ export default function ServiceDetail() {
   const { me } = useAuth();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const canFinance = me!.role === "r1" || me!.role === "r2";
-  const canEdit = me!.role === "r1" || me!.role === "r2" || me!.role === "r3";
+  const canEditMed = me!.role === "r1" || me!.role === "r3";
+  const canEditFin = me!.role === "r1" || me!.role === "r2";
+  const viaRequest = me!.role !== "r1";
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>({});
 
@@ -55,8 +56,27 @@ export default function ServiceDetail() {
     },
   });
 
+  const savePrice = useMutation({
+    mutationFn: async ({ clinicId, price, priceOnline }: { clinicId: number; price: number; priceOnline?: number }) => {
+      const payload: Record<string, number> = { service_id: Number(id), clinic_id: clinicId, price };
+      if (priceOnline != null) payload.price_online = priceOnline;
+      const reqId = await submitEntityChange(
+        me!.role,
+        async () => { await api.post(`/api/services/${id}/prices`, { clinic_id: clinicId, currency: "MDL", price, price_online: priceOnline }); },
+        {
+          title: `Цена услуги ${s!.code}`,
+          items: [{ entity_type: "service_price", entity_id: Number(id), field_name: "price", old_value: null, new_value: payload }],
+        },
+      );
+      return reqId;
+    },
+    onSuccess: (reqId) => {
+      if (reqId) { nav(`/requests/${reqId}`); return; }
+      qc.invalidateQueries({ queryKey: ["service-prices", id] });
+    },
+  });
+
   if (!s) return <div className="muted">Загрузка…</div>;
-  const clinicName = (cid: number) => clinics?.find((c) => c.id === cid)?.name_ru ?? cid;
   const refName = (list: Ref[] | undefined, rid?: number) => list?.find((x) => x.id === rid)?.name_ru ?? "—";
 
   const startEdit = () => {
@@ -101,8 +121,8 @@ export default function ServiceDetail() {
       <div className="topbar">
         <h1>{s.name_ru}</h1>
         <div className="actions">
-          {canEdit && !edit && <button className="ghost" onClick={startEdit}>Редактировать</button>}
-          {canEdit && !edit && (
+          {canEditMed && !edit && <button className="ghost" onClick={startEdit}>Редактировать</button>}
+          {canEditMed && !edit && (
             <button className="ghost" onClick={archive}>
               {s.status === "active" ? "Архивировать" : "Активировать"}
             </button>
@@ -110,8 +130,11 @@ export default function ServiceDetail() {
           <span className={`pill ${s.status}`}>{STATUS_NAMES[s.status]}</span>
         </div>
       </div>
-      {canEdit && me!.role !== "r1" && edit && (
+      {canEditMed && viaRequest && edit && (
         <p className="tag">Изменения будут отправлены на согласование заявкой.</p>
+      )}
+      {canEditFin && viaRequest && !canEditMed && (
+        <p className="tag">Изменение цен отправляется на согласование заявкой.</p>
       )}
       <div className="grid cols-3">
         <div className="card">
@@ -150,21 +173,26 @@ export default function ServiceDetail() {
             </>
           )}
         </div>
-        {canFinance && (
+        {canEditFin && (
           <div className="card">
             <h3>Цены по клиникам</h3>
             <table>
-              <thead><tr><th>Клиника</th><th>Цена</th><th>Online</th><th>Спец.</th></tr></thead>
+              <thead><tr><th>Клиника</th><th>Цена</th><th>Online</th><th>Спец.</th>{canEditFin && <th></th>}</tr></thead>
               <tbody>
-                {prices?.map((p) => (
-                  <tr key={p.id}>
-                    <td>{clinicName(p.clinic_id)}</td>
-                    <td>{p.price ?? "—"} {p.currency}</td>
-                    <td>{p.price_online ?? "—"}</td>
-                    <td>{p.price_special ?? "—"}</td>
-                  </tr>
-                ))}
-                {prices?.length === 0 && <tr><td colSpan={4} className="muted">Цены не заданы</td></tr>}
+                {(clinics ?? []).map((c) => {
+                  const p = prices?.find((x) => x.clinic_id === c.id);
+                  return (
+                    <ServicePriceRow
+                      key={c.id}
+                      clinic={c}
+                      price={p}
+                      canEdit={canEditFin}
+                      pending={savePrice.isPending}
+                      onSave={(price, priceOnline) => savePrice.mutate({ clinicId: c.id, price, priceOnline })}
+                    />
+                  );
+                })}
+                {!clinics?.length && <tr><td colSpan={5} className="muted">Нет клиник</td></tr>}
               </tbody>
             </table>
           </div>
@@ -185,5 +213,31 @@ export default function ServiceDetail() {
         )}
       </div>
     </>
+  );
+}
+
+function ServicePriceRow({ clinic, price, canEdit, pending, onSave }: {
+  clinic: Ref; price?: Price; canEdit: boolean; pending: boolean;
+  onSave: (price: number, priceOnline?: number) => void;
+}) {
+  const [val, setVal] = useState(price?.price != null ? String(price.price) : "");
+  const [online, setOnline] = useState(price?.price_online != null ? String(price.price_online) : "");
+  return (
+    <tr>
+      <td>{clinic.name_ru}</td>
+      <td>{price?.price ?? "—"} {price?.currency ?? "MDL"}</td>
+      <td>{price?.price_online ?? "—"}</td>
+      <td>{price?.price_special ?? "—"}</td>
+      {canEdit && (
+        <td>
+          <div className="row" style={{ gap: 4 }}>
+            <input type="number" value={val} onChange={(e) => setVal(e.target.value)} placeholder="Цена" style={{ maxWidth: 90 }} />
+            <input type="number" value={online} onChange={(e) => setOnline(e.target.value)} placeholder="Online" style={{ maxWidth: 90 }} />
+            <button className="ghost" style={{ flex: "0 0 auto" }} disabled={!val || pending}
+              onClick={() => onSave(Number(val), online ? Number(online) : undefined)}>OK</button>
+          </div>
+        </td>
+      )}
+    </tr>
   );
 }

@@ -11,7 +11,8 @@ export default function PackageDetail() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const role = me!.role;
-  const canWrite = role === "r1" || role === "r2" || role === "r3";
+  const canWriteFin = role === "r1" || role === "r2";
+  const canWriteMed = role === "r1" || role === "r3";
   const viaRequest = role !== "r1";
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState("");
@@ -79,7 +80,7 @@ export default function PackageDetail() {
           <h1>{p.name_ru}</h1>
         )}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {canWrite && !edit && (
+          {canWriteMed && !edit && (
             <>
               <button className="ghost" onClick={() => { setName(p.name_ru); setEdit(true); }}>Переименовать</button>
               <button className="ghost" onClick={toggle}>{p.status === "active" ? "Деактивировать" : "Активировать"}</button>
@@ -88,12 +89,12 @@ export default function PackageDetail() {
           <span className={`pill ${p.status}`}>{STATUS_NAMES[p.status]}</span>
         </div>
       </div>
-      {viaRequest && canWrite && <p className="tag">Ваши изменения отправляются на согласование заявкой.</p>}
+      {viaRequest && (canWriteMed || canWriteFin) && <p className="tag">Ваши изменения отправляются на согласование заявкой.</p>}
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: "span 2" }}>
           <h3>Состав пакета ({p.items.length})</h3>
           <table>
-            <thead><tr><th>Услуга</th><th>Тип включения</th>{canWrite && <th></th>}</tr></thead>
+            <thead><tr><th>Услуга</th><th>Тип включения</th>{canWriteFin && <th></th>}</tr></thead>
             <tbody>
               {p.items.map((it) => {
                 const s = svcName(it.service_id);
@@ -101,14 +102,14 @@ export default function PackageDetail() {
                   <tr key={it.id}>
                     <td>{s ? <Link to={`/services/${s.id}`}>{s.code} · {s.name_ru}</Link> : `#${it.service_id}`}</td>
                     <td>{it.inclusion_type === "required" ? "Обязательная" : "По назначению"}</td>
-                    {canWrite && <td><button className="ghost" onClick={() => removeItem(it.id)}>Удалить</button></td>}
+                    {canWriteFin && <td><button className="ghost" onClick={() => removeItem(it.id)}>Удалить</button></td>}
                   </tr>
                 );
               })}
-              {p.items.length === 0 && <tr><td colSpan={canWrite ? 3 : 2} className="muted">Услуг нет</td></tr>}
+              {p.items.length === 0 && <tr><td colSpan={canWriteFin ? 3 : 2} className="muted">Услуг нет</td></tr>}
             </tbody>
           </table>
-          {canWrite && (
+          {canWriteFin && (
             <div className="row" style={{ alignItems: "flex-end", marginTop: 12 }}>
               <div style={{ flex: 2 }}><label>Добавить услугу</label>
                 <select value={svcId} onChange={(e) => setSvcId(e.target.value)}>
@@ -126,7 +127,7 @@ export default function PackageDetail() {
             </div>
           )}
         </div>
-        <PackagePrice clinics={clinics ?? []} prices={p.prices} packageId={Number(id)} canWrite={canWrite} onSave={setPrice} />
+        <PackagePrice clinics={clinics ?? []} prices={p.prices} packageId={Number(id)} canWrite={canWriteFin} onSave={setPrice} />
       </div>
     </>
   );

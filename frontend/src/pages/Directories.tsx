@@ -19,6 +19,7 @@ function RefTable({ title, url, entity, hasNameRo }: { title: string; url: strin
   const qc = useQueryClient();
   const role = me!.role;
   const viaRequest = role !== "r1";
+  const canWrite = role === "r1" || role === "r3";
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState(EMPTY);
@@ -71,7 +72,7 @@ function RefTable({ title, url, entity, hasNameRo }: { title: string; url: strin
     <div className="card">
       <h3>{title}</h3>
       <table>
-        <thead><tr><th>Код</th><th>Название</th><th>Статус</th><th></th></tr></thead>
+        <thead><tr><th>Код</th><th>Название</th><th>Статус</th>{canWrite && <th></th>}</tr></thead>
         <tbody>
           {data?.map((r) => editId === r.id ? (
             <tr key={r.id}>
@@ -91,22 +92,22 @@ function RefTable({ title, url, entity, hasNameRo }: { title: string; url: strin
               <td>{r.code}</td>
               <td>{r.name_ru}</td>
               <td><span className={`pill ${r.status === "archived" ? "inactive" : "active"}`}>{r.status === "archived" ? "Архив" : "Активен"}</span></td>
-              <td><div className="row" style={{ gap: 4 }}>
+              {canWrite && <td><div className="row" style={{ gap: 4 }}>
                 <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => { setEditId(r.id); setEditForm({ code: r.code, name_ru: r.name_ru, name_ro: r.name_ro ?? "" }); }}>Изм.</button>
                 <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setArchiveTarget(r)}>{r.status === "archived" ? "Разарх." : "Архив"}</button>
-              </div></td>
+              </div></td>}
             </tr>
           ))}
         </tbody>
       </table>
-      <div className="row" style={{ marginTop: 12, alignItems: "flex-end" }}>
+      {canWrite && <div className="row" style={{ marginTop: 12, alignItems: "flex-end" }}>
         <div><label>Код</label><input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
         <div><label>Название (RU)</label><input value={form.name_ru} onChange={(e) => setForm({ ...form, name_ru: e.target.value })} /></div>
         {hasNameRo && <div><label>Название (RO)</label><input value={form.name_ro} onChange={(e) => setForm({ ...form, name_ro: e.target.value })} /></div>}
         <button style={{ flex: "0 0 auto" }} disabled={!form.code || !form.name_ru || create.isPending} onClick={() => create.mutate()}>
           {viaRequest ? "Через заявку" : "Добавить"}
         </button>
-      </div>
+      </div>}
 
       {archiveTarget && (
         <ConfirmDialog
