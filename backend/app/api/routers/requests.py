@@ -1,3 +1,5 @@
+import enum
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,9 +64,31 @@ async def _participants(db: AsyncSession, req_id: int) -> list[str]:
     return list(emails)
 
 
+def _coerce_value(obj, field: str, raw):
+    val = raw.get("v") if isinstance(raw, dict) else raw
+    if val is None or val == "":
+        return None
+    col = obj.__table__.columns.get(field)
+    if col is None:
+        return val
+    py = col.type.python_type
+    try:
+        if py is int:
+            return int(val)
+        if py is float:
+            return float(val)
+        if py is bool:
+            return val if isinstance(val, bool) else str(val).lower() in ("1", "true", "yes")
+        if isinstance(py, type) and issubclass(py, enum.Enum):
+            return py(str(val).split(".")[-1])
+    except (TypeError, ValueError):
+        pass
+    return val
+
+
 def _set_field(db: AsyncSession, obj, entity_type: str, field: str, value, actor_id: int):
     old = getattr(obj, field)
-    new = value.get("v") if isinstance(value, dict) else value
+    new = _coerce_value(obj, field, value)
     setattr(obj, field, new)
     db.add(EntityHistory(
         entity_type=entity_type, entity_id=obj.id, field_name=field,

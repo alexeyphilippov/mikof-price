@@ -41,6 +41,7 @@ export default function RequestDetail() {
     mutationFn: async (action: { url: string; body?: any }) => api.patch(`/api/requests/${id}/${action.url}`, action.body ?? {}),
     onSuccess: invalidate,
   });
+  const actErr = act.isError ? ((act.error as any)?.response?.data?.detail ?? "Не удалось выполнить действие") : "";
   const addComment = useMutation({
     mutationFn: async () => api.post(`/api/requests/${id}/comments`, { text: comment }),
     onSuccess: () => { setComment(""); invalidate(); },
@@ -138,6 +139,7 @@ export default function RequestDetail() {
           )}
 
           <div style={{ marginTop: 18 }}>
+            {actErr && <div className="err" style={{ marginBottom: 10 }}>{String(actErr)}</div>}
             {(isR2 && r.status === "pending_cfd") && (
               <div className="row">
                 <button onClick={() => {
