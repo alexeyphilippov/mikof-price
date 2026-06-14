@@ -237,7 +237,7 @@ export default function ServiceDetail() {
 
 interface PriceEdit { price: string; online: string; special: string }
 interface PriceRowPayload { clinic_id: number; price?: number; price_online?: number; price_special?: number }
-const PRICE_CELL = { width: 64, padding: "4px 6px" } as const;
+const PRICE_CELL = { width: 80, padding: "4px 6px" } as const;
 const toNum = (v: string) => (v.trim() === "" ? undefined : Number(v));
 const priceEditOf = (p?: Price): PriceEdit => ({
   price: p?.price != null ? String(p.price) : "",
