@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Clinic, Package, Service, STATUS_NAMES } from "../api/client";
@@ -62,9 +62,12 @@ export default function PackageDetail() {
     direct: async () => { await api.delete(`/api/packages/${id}/items/${itemId}`); },
     payload: { title: `Удаление услуги из пакета ${p.code}`, items: [{ entity_type: "package_item_remove", field_name: "remove", old_value: null, new_value: { item_id: itemId } }] },
   });
-  const setPrice = (clinicId: number, priceFixed: number | null) => act.mutate({
-    direct: async () => { await api.post(`/api/packages/${id}/prices`, { clinic_id: clinicId, price_fixed: priceFixed }); },
-    payload: { title: `Цена пакета ${p.code}`, items: [{ entity_type: "package_price", field_name: "price_fixed", old_value: null, new_value: { package_id: Number(id), clinic_id: clinicId, price_fixed: priceFixed } }] },
+  const savePrices = (rows: { clinic_id: number; price_fixed: number | null }[]) => act.mutate({
+    direct: async () => { for (const r of rows) await api.post(`/api/packages/${id}/prices`, r); },
+    payload: {
+      title: `Цены пакета ${p.code}`,
+      items: rows.map((r) => ({ entity_type: "package_price", field_name: "price_fixed", old_value: null, new_value: { package_id: Number(id), currency: "MDL", ...r } })),
+    },
   });
 
   return (
@@ -127,16 +130,31 @@ export default function PackageDetail() {
             </div>
           )}
         </div>
-        <PackagePrice clinics={clinics ?? []} prices={p.prices} packageId={Number(id)} canWrite={canWriteFin} onSave={setPrice} />
+        <PackagePrice clinics={clinics ?? []} prices={p.prices} packageId={Number(id)} canWrite={canWriteFin} role={role} pending={act.isPending} onSubmit={savePrices} />
       </div>
     </>
   );
 }
 
-function PackagePrice({ clinics, prices, packageId, canWrite, onSave }: {
+const PRICE_CELL = { width: 80, padding: "4px 6px" } as const;
+
+function PackagePrice({ clinics, prices, packageId, canWrite, role, pending, onSubmit }: {
   clinics: Clinic[]; prices: Package["prices"]; packageId: number; canWrite: boolean;
-  onSave: (clinicId: number, priceFixed: number | null) => void;
+  role: string; pending: boolean; onSubmit: (rows: { clinic_id: number; price_fixed: number | null }[]) => void;
 }) {
+  const active = clinics.filter((c) => c.status === "active");
+  const initOf = (cid: number) => { const f = prices.find((pr) => pr.clinic_id === cid)?.price_fixed; return f != null ? String(f) : ""; };
+  const [pe, setPe] = useState<Record<number, string>>({});
+  useEffect(() => {
+    const m: Record<number, string> = {};
+    for (const c of active) m[c.id] = initOf(c.id);
+    setPe(m);
+  }, [clinics, prices]);
+  const submit = () => {
+    const rows = active.flatMap((c) => (pe[c.id] ?? "") !== initOf(c.id)
+      ? [{ clinic_id: c.id, price_fixed: (pe[c.id] ?? "").trim() === "" ? null : Number(pe[c.id]) }] : []);
+    if (rows.length) onSubmit(rows);
+  };
   return (
     <div className="card">
       <h3>Цена по клиникам</h3>
@@ -144,38 +162,28 @@ function PackagePrice({ clinics, prices, packageId, canWrite, onSave }: {
       <table>
         <thead><tr><th>Клиника</th><th>Расчёт</th>{canWrite && <th>Фикс.</th>}</tr></thead>
         <tbody>
-          {clinics.filter((c) => c.status === "active").map((c) => (
-            <PriceRow key={c.id} packageId={packageId} clinic={c}
-              fixed={prices.find((pr) => pr.clinic_id === c.id)?.price_fixed ?? null}
-              canWrite={canWrite} onSave={onSave} />
+          {active.map((c) => (
+            <tr key={c.id}>
+              <td>{c.name_ru}</td>
+              <td><ComputedCell packageId={packageId} clinicId={c.id} /></td>
+              {canWrite && <td><input type="number" value={pe[c.id] ?? ""} onChange={(e) => setPe((prev) => ({ ...prev, [c.id]: e.target.value }))} style={PRICE_CELL} /></td>}
+            </tr>
           ))}
         </tbody>
       </table>
+      {canWrite && !!active.length && (
+        <button style={{ marginTop: 12 }} disabled={pending} onClick={submit}>
+          {role === "r1" ? "Сохранить цены" : "Отправить на согласование"}
+        </button>
+      )}
     </div>
   );
 }
 
-function PriceRow({ packageId, clinic, fixed, canWrite, onSave }: {
-  packageId: number; clinic: Clinic; fixed: number | null; canWrite: boolean;
-  onSave: (clinicId: number, priceFixed: number | null) => void;
-}) {
-  const [val, setVal] = useState(fixed != null ? String(fixed) : "");
+function ComputedCell({ packageId, clinicId }: { packageId: number; clinicId: number }) {
   const { data } = useQuery({
-    queryKey: ["pkg-price", packageId, clinic.id],
-    queryFn: async () => (await api.get(`/api/packages/${packageId}/computed-price/${clinic.id}`)).data,
+    queryKey: ["pkg-price", packageId, clinicId],
+    queryFn: async () => (await api.get(`/api/packages/${packageId}/computed-price/${clinicId}`)).data,
   });
-  return (
-    <tr>
-      <td>{clinic.name_ru}</td>
-      <td>{data?.price != null ? `${data.price} MDL` : "—"} {data?.fixed ? <span className="tag">(фикс.)</span> : null}</td>
-      {canWrite && (
-        <td>
-          <div className="row" style={{ gap: 4 }}>
-            <input type="number" value={val} onChange={(e) => setVal(e.target.value)} style={{ maxWidth: 110 }} />
-            <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => onSave(clinic.id, val === "" ? null : Number(val))}>OK</button>
-          </div>
-        </td>
-      )}
-    </tr>
-  );
+  return <>{data?.price != null ? `${data.price} MDL` : "—"} {data?.fixed ? <span className="tag">(фикс.)</span> : null}</>;
 }
