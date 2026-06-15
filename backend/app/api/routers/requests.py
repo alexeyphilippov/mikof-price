@@ -27,6 +27,7 @@ from app.models.models import (
     User,
     UserRole,
 )
+from app.core.config import settings
 from app.services.notify import send_mail
 from app.services.request_email import render_approval_email
 from app.schemas.schemas import (
@@ -91,6 +92,15 @@ async def _participants(db: AsyncSession, req_id: int) -> list[str]:
         r = await db.execute(select(User.email).join(model, col == User.id).where(model.request_id == req_id))
         emails.update(r.scalars().all())
     return list(emails)
+
+
+async def _author_email(db: AsyncSession, req: ChangeRequest) -> str | None:
+    u = await db.get(User, req.author_id)
+    return u.email if u else None
+
+
+def _req_url(req_id: int) -> str:
+    return f"{settings.app_base_url.rstrip('/')}/requests/{req_id}"
 
 
 def _coerce_value(obj, field: str, raw):
@@ -283,6 +293,9 @@ async def submit_request(
     # Ф5: уведомить следующего согласующего — интерактивное HTML-письмо
     subject, text, html = await render_approval_email(db, req)
     bg.add_task(send_mail, await _emails_by_role(db, notify_role), subject, text, html)
+    if author := await _author_email(db, req):
+        bg.add_task(send_mail, [author], f"Заявка №{req.id} отправлена на согласование",
+                    f"Ваша заявка «{req.title}» отправлена на согласование.\n\nОткрыть: {_req_url(id)}")
     return req
 
 
@@ -318,9 +331,13 @@ async def approve_request(
         # R2 согласовал → заявка ушла гендиректору: интерактивное HTML-письмо
         subject, text, html = await render_approval_email(db, req)
         bg.add_task(send_mail, recipients, subject, text, html)
+        if author := await _author_email(db, req):
+            bg.add_task(send_mail, [author], f"Заявка №{req.id}: согласована финдиректором",
+                        f"Заявка «{req.title}» передана на утверждение гендиректору.\n\nОткрыть: {_req_url(id)}")
     else:
-        bg.add_task(send_mail, recipients, f"Заявка №{req.id}: статус {req.status.value}",
-                    f"Заявка «{req.title}» переведена в статус {req.status.value}.")
+        url = _req_url(id)
+        bg.add_task(send_mail, recipients, f"Заявка №{req.id}: утверждена",
+                    f"Заявка «{req.title}» утверждена.\n\nОткрыть: {url}")
     return req
 
 
@@ -346,7 +363,7 @@ async def reject_request(
     await db.commit()
     await db.refresh(req)
     bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} возвращена на доработку",
-                f"Заявка «{req.title}» возвращена ({req.status.value}). {body.note or ''}")
+                f"Заявка «{req.title}» возвращена на доработку. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
     return req
 
 
