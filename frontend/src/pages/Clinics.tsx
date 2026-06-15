@@ -22,7 +22,7 @@ export default function Clinics() {
   const qc = useQueryClient();
   const role = me!.role;
   const viaRequest = role !== "r1";
-  const canWrite = role === "r1" || role === "r3";
+  const canWrite = role === "r1";
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState(EMPTY);

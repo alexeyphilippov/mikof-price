@@ -27,6 +27,7 @@ _ENTITY_LABELS = {
 _STATUS_NAMES = {
     "draft": "Черновик", "pending_cfd": "У финдиректора", "pending_ceo": "У гендиректора",
     "approved": "Утверждена", "rejected": "Отклонена", "revision": "На доработке",
+    "cancelled": "Отменена",
     "active": "Активна", "inactive": "Не активна", "pending": "Ожидает",
 }
 _FK_MODELS = {
@@ -51,9 +52,15 @@ def _fmt(field: str, raw, maps) -> str:
     v = _scalar(raw)
     if v is None or v == "":
         return "—"
-    if isinstance(v, dict):  # ценовой payload без поля field
-        parts = [f"{_FIELD_LABELS.get(k, k)}: {vv}" for k, vv in v.items()
-                 if k not in ("service_id", "clinic_id", "package_id") and vv not in (None, "")]
+    if isinstance(v, dict):  # ценовой payload
+        parts = []
+        if cid := v.get("clinic_id"):
+            cn = maps.get("clinic_id", {}).get(int(cid), f"#{cid}")
+            parts.append(f"Клиника: {cn}")
+        parts.extend(
+            f"{_FIELD_LABELS.get(k, k)}: {vv}" for k, vv in v.items()
+            if k not in ("service_id", "clinic_id", "package_id", "currency") and vv not in (None, "")
+        )
         return ", ".join(parts) or "—"
     if field in _FK_MODELS:
         key = int(v) if str(v).isdigit() else v

@@ -5,7 +5,7 @@ import { api, ChangeRequest, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import SortableTable, { Column } from "../components/SortableTable";
 
-const METRICS = ["pending_cfd", "pending_ceo", "revision", "approved"];
+const METRICS = ["pending_cfd", "pending_ceo", "revision", "approved", "cancelled"];
 
 export default function Requests() {
   const { me } = useAuth();

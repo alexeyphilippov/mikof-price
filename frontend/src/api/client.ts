@@ -69,6 +69,7 @@ export const STATUS_NAMES: Record<string, string> = {
   approved: "Утверждена",
   rejected: "Отклонена",
   revision: "На доработке",
+  cancelled: "Отменена",
   active: "Активна",
   inactive: "Не активна",
   pending: "На согласовании",

@@ -44,8 +44,12 @@ router = APIRouter(prefix="/api/requests", tags=["requests"])
 R2_FINANCIAL = frozenset({"service_price", "package_price", "package_item_add", "package_item_remove"})
 R3_MEDICAL_TYPES = frozenset({
     "service", "package", "service_create", "package_create",
-    "group", "subgroup", "executor", "location", "clinic",
-    "group_create", "subgroup_create", "executor_create", "location_create", "clinic_create",
+    "group", "subgroup", "executor", "location",
+    "group_create", "subgroup_create", "executor_create", "location_create",
+})
+_CANCELABLE = frozenset({
+    RequestStatus.draft, RequestStatus.revision,
+    RequestStatus.pending_cfd, RequestStatus.pending_ceo,
 })
 R3_SERVICE_FIELDS = frozenset({
     "name_ru", "name_ro", "duration_min", "note", "group_id", "subgroup_id", "executor_id", "location_id", "status",
@@ -281,6 +285,8 @@ async def submit_request(
     req = await db.get(ChangeRequest, id)
     if not req or req.author_id != user.id:
         raise HTTPException(404)
+    if req.status == RequestStatus.cancelled:
+        raise HTTPException(400, "Заявка отменена")
     if req.status not in (RequestStatus.draft, RequestStatus.revision):
         raise HTTPException(400, "Request cannot be submitted")
     old = req.status.value
@@ -310,6 +316,8 @@ async def approve_request(
     req = await db.get(ChangeRequest, id)
     if not req:
         raise HTTPException(404)
+    if req.status == RequestStatus.cancelled:
+        raise HTTPException(400, "Заявка отменена")
     old = req.status.value
     if user.role == UserRole.r2 and req.status == RequestStatus.pending_cfd:
         for item in req.items:
@@ -352,6 +360,8 @@ async def reject_request(
     req = await db.get(ChangeRequest, id)
     if not req:
         raise HTTPException(404)
+    if req.status == RequestStatus.cancelled:
+        raise HTTPException(400, "Заявка отменена")
     old = req.status.value
     if user.role == UserRole.r2 and req.status == RequestStatus.pending_cfd:
         req.status = RequestStatus.revision
@@ -364,6 +374,30 @@ async def reject_request(
     await db.refresh(req)
     bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} возвращена на доработку",
                 f"Заявка «{req.title}» возвращена на доработку. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
+    return req
+
+
+@router.patch("/{id}/cancel", response_model=ChangeRequestOut)
+async def cancel_request(
+    id: int,
+    bg: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.r2, UserRole.r3)),
+):
+    req = await db.get(ChangeRequest, id)
+    if not req or req.author_id != user.id:
+        raise HTTPException(404)
+    if req.status not in _CANCELABLE:
+        raise HTTPException(400, "Заявку нельзя отменить")
+    old = req.status.value
+    req.status = RequestStatus.cancelled
+    db.add(RequestHistory(request_id=id, from_status=old, to_status=req.status.value, actor_id=user.id))
+    await db.commit()
+    await db.refresh(req)
+    await log_action(db, user.id, "cancel_request", "change_request", id)
+    recipients = [e for e in await _participants(db, id) if e != user.email]
+    bg.add_task(send_mail, recipients, f"Заявка №{req.id} отменена автором",
+                f"Заявка «{req.title}» отменена автором.\n\nОткрыть: {_req_url(id)}")
     return req
 
 

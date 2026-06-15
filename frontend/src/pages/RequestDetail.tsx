@@ -53,9 +53,14 @@ export default function RequestDetail() {
     group_id: groups, subgroup_id: subgroups, executor_id: executors,
     location_id: locations, clinic_id: clinics,
   };
-  const scalar = (raw: any) => (raw && typeof raw === "object" && "v" in raw ? raw.v : raw);
+  const scalar = (raw: any, field?: string) => {
+    if (raw == null) return raw;
+    if (typeof raw === "object" && "v" in raw) return raw.v;
+    if (field && typeof raw === "object" && field in raw) return raw[field];
+    return raw;
+  };
   const fmtVal = (field: string, raw: any): string => {
-    const v = scalar(raw);
+    const v = scalar(raw, field);
     if (v === null || v === undefined || v === "") return "—";
     const list = FK_LIST[field];
     const found = list?.find((x) => String(x.id) === String(v));
@@ -66,12 +71,29 @@ export default function RequestDetail() {
     }
     return String(v);
   };
+  const fmtPriceItem = (it: ChangeRequest["items"][number]): string => {
+    const raw = it.r2_override_value ?? it.new_value;
+    if (!raw || typeof raw !== "object") return fmtVal(it.field_name, raw);
+    const parts: string[] = [];
+    for (const [k, label] of [["price", "Цена"], ["price_online", "Online"], ["price_special", "Спец."], ["price_fixed", "Фикс."]] as const) {
+      if (raw[k] != null && raw[k] !== "") parts.push(`${label}: ${raw[k]}`);
+    }
+    return parts.join(", ") || "—";
+  };
+  const clinicName = (it: ChangeRequest["items"][number]) => {
+    const raw = it.r2_override_value ?? it.new_value;
+    if (!raw || typeof raw !== "object" || raw.clinic_id == null) return "—";
+    return clinics?.find((c) => c.id === raw.clinic_id)?.name_ru ?? `#${raw.clinic_id}`;
+  };
+  const isPriceItem = (et: string) => et === "service_price" || et === "package_price";
+
   const entityLabel = (it: ChangeRequest["items"][number]) =>
     ENTITY_LABELS[it.entity_type] ?? it.entity_type;
 
   const isR2 = me!.role === "r2";
   const isR1 = me!.role === "r1";
-  const isAuthor = me!.role === "r3" && r.author_id === me!.id;
+  const isAuthor = r.author_id === me!.id;
+  const cancellable = ["draft", "revision", "pending_cfd", "pending_ceo"].includes(r.status);
 
   // Уникальные затрагиваемые сущности (зам.1)
   const affected = Array.from(
@@ -97,15 +119,16 @@ export default function RequestDetail() {
           </p>
           {r.note && <p className="muted">{r.note}</p>}
           <table>
-            <thead><tr><th>Сущность</th><th>Поле</th><th>Было</th><th>Станет</th></tr></thead>
+            <thead><tr><th>Сущность</th><th>Клиника</th><th>Поле</th><th>Было</th><th>Станет</th></tr></thead>
             <tbody>
               {r.items.map((it) => {
                 const canOverride = isR2 && r.status === "pending_cfd" && it.entity_type === "service_price";
                 return (
                   <tr key={it.id}>
                     <td>{entityLabel(it)}</td>
+                    <td>{isPriceItem(it.entity_type) ? clinicName(it) : "—"}</td>
                     <td>{FIELD_LABELS[it.field_name] ?? it.field_name}</td>
-                    <td className="muted">{fmtVal(it.field_name, it.old_value)}</td>
+                    <td className="muted">{isPriceItem(it.entity_type) ? "—" : fmtVal(it.field_name, it.old_value)}</td>
                     <td>
                       {canOverride ? (
                         <div className="row" style={{ alignItems: "center", gap: 6 }}>
@@ -118,6 +141,8 @@ export default function RequestDetail() {
                             onChange={(e) => setOverrides({ ...overrides, [it.id]: e.target.value })}
                           />
                         </div>
+                      ) : isPriceItem(it.entity_type) ? (
+                        fmtPriceItem(it)
                       ) : (
                         fmtVal(it.field_name, it.r2_override_value ?? it.new_value)
                       )}
@@ -125,7 +150,7 @@ export default function RequestDetail() {
                   </tr>
                 );
               })}
-              {r.items.length === 0 && <tr><td colSpan={4} className="muted">Без изменений данных</td></tr>}
+              {r.items.length === 0 && <tr><td colSpan={5} className="muted">Без изменений данных</td></tr>}
             </tbody>
           </table>
 
@@ -165,6 +190,11 @@ export default function RequestDetail() {
             )}
             {(isAuthor && (r.status === "draft" || r.status === "revision")) && (
               <button onClick={() => act.mutate({ url: "submit" })}>Отправить на согласование</button>
+            )}
+            {isAuthor && cancellable && (
+              <button className="danger" style={{ marginLeft: 8 }} onClick={() => {
+                if (window.confirm("Отменить заявку?")) act.mutate({ url: "cancel" });
+              }}>Отменить заявку</button>
             )}
             {(isR1 || isR2) && (r.status === "pending_cfd" || r.status === "pending_ceo") && (
               <div className="field" style={{ marginTop: 12 }}>
