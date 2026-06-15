@@ -5,7 +5,8 @@ from sqlalchemy import select, func
 
 from app.core.db import get_db
 from app.models.models import (
-    Package, PackageItem, PackagePrice, ServicePrice, UserRole, EntityHistory, User
+    Package, PackageItem, PackagePrice, ServicePrice, UserRole, EntityHistory, User,
+    Clinic, ClinicStatus,
 )
 from app.schemas.schemas import (
     PackageOut, PackageCreate, PackageUpdate, PackagePriceOut, PackagePriceCreate,
@@ -32,9 +33,9 @@ async def _calc_package_price(db: AsyncSession, package_id: int, clinic_id: int)
                 ServicePrice.service_id == item.service_id,
                 ServicePrice.clinic_id == clinic_id,
                 ServicePrice.valid_to == None,
-            )
+            ).order_by(ServicePrice.valid_from.desc())
         )
-        p = price_res.scalar_one_or_none()
+        p = price_res.scalars().first()
         if p is None:
             return None
         total += float(p)
@@ -160,6 +161,11 @@ async def set_package_price(
     db: AsyncSession = Depends(get_db),
     _=Depends(_r1),  # прямая правка — R1; R2/R3 через заявку
 ):
+    clinic = await db.get(Clinic, body.clinic_id)
+    if not clinic:
+        raise HTTPException(404, "Клиника не найдена")
+    if clinic.status != ClinicStatus.active:
+        raise HTTPException(400, "Нельзя задать цену для закрытой клиники")
     res = await db.execute(
         select(PackagePrice).where(
             PackagePrice.package_id == id, PackagePrice.clinic_id == body.clinic_id

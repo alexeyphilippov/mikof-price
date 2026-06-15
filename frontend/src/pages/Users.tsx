@@ -9,14 +9,20 @@ const genPassword = () =>
 export default function Users() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["users"], queryFn: async () => (await api.get<Me[]>("/api/users")).data });
-  const [form, setForm] = useState({ email: "", name: "", role: "r4", password: "" });
+  const [form, setForm] = useState({ email: "", name: "", role: "r4", password: genPassword() });
   const [pwTarget, setPwTarget] = useState<Me | null>(null);
   const [pwValue, setPwValue] = useState("");
   const [pwDone, setPwDone] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const create = useMutation({
     mutationFn: async () => api.post("/api/users", form),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setForm({ email: "", name: "", role: "r4", password: "" }); },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      setMsg({ ok: true, text: `Пользователь ${(r.data as Me).email} создан` });
+      setForm({ email: "", name: "", role: "r4", password: genPassword() });
+    },
+    onError: (e: any) => setMsg({ ok: false, text: e?.response?.data?.detail ?? "Ошибка создания пользователя" }),
   });
   const toggle = useMutation({
     mutationFn: async (u: Me) => api.patch(`/api/users/${u.id}`, { is_active: !u.is_active }),
@@ -59,8 +65,15 @@ export default function Users() {
               {Object.entries(ROLE_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
-          <div className="field"><label>Пароль</label><input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
-          <button style={{ width: "100%" }} disabled={!form.email || !form.password} onClick={() => create.mutate()}>Создать</button>
+          <div className="field"><label>Пароль</label>
+            <div className="row" style={{ gap: 6 }}>
+              <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => navigator.clipboard?.writeText(form.password)}>Копировать</button>
+              <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setForm({ ...form, password: genPassword() })}>Сгенерировать</button>
+            </div>
+          </div>
+          <button style={{ width: "100%" }} disabled={!form.email || !form.password || create.isPending} onClick={() => create.mutate()}>Создать</button>
+          {msg && <p style={{ color: msg.ok ? "var(--green)" : "var(--red, #c00)", fontSize: 13 }}>{msg.text}</p>}
         </div>
       </div>
 

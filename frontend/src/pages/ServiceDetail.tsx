@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Price, Ref, Service, STATUS_NAMES } from "../api/client";
@@ -56,25 +56,40 @@ export default function ServiceDetail() {
     },
   });
 
-  const savePrice = useMutation({
-    mutationFn: async ({ clinicId, price, priceOnline }: { clinicId: number; price: number; priceOnline?: number }) => {
-      const payload: Record<string, number> = { service_id: Number(id), clinic_id: clinicId, price };
-      if (priceOnline != null) payload.price_online = priceOnline;
-      const reqId = await submitEntityChange(
-        me!.role,
-        async () => { await api.post(`/api/services/${id}/prices`, { clinic_id: clinicId, currency: "MDL", price, price_online: priceOnline }); },
-        {
-          title: `Цена услуги ${s!.code}`,
-          items: [{ entity_type: "service_price", entity_id: Number(id), field_name: "price", old_value: null, new_value: payload }],
-        },
-      );
-      return reqId;
-    },
+  const [pe, setPe] = useState<Record<number, PriceEdit>>({});
+  useEffect(() => {
+    if (!clinics) return;
+    const m: Record<number, PriceEdit> = {};
+    for (const c of clinics) m[c.id] = priceEditOf(prices?.find((x) => x.clinic_id === c.id));
+    setPe(m);
+  }, [clinics, prices]);
+
+  const savePrices = useMutation({
+    mutationFn: async (rows: PriceRowPayload[]) => submitEntityChange(
+      me!.role,
+      async () => { for (const r of rows) await api.post(`/api/services/${id}/prices`, { currency: "MDL", ...r }); },
+      {
+        title: `Цены услуги ${s!.code}`,
+        items: rows.map<ChangeItem>((r) => ({
+          entity_type: "service_price", entity_id: Number(id), field_name: "price",
+          old_value: null, new_value: { service_id: Number(id), currency: "MDL", ...r },
+        })),
+      },
+    ),
     onSuccess: (reqId) => {
       if (reqId) { nav(`/requests/${reqId}`); return; }
       qc.invalidateQueries({ queryKey: ["service-prices", id] });
     },
   });
+
+  const submitPrices = () => {
+    const rows = (clinics ?? []).filter((c) => c.status === "active").flatMap<PriceRowPayload>((c) => {
+      const e = pe[c.id], init = priceEditOf(prices?.find((x) => x.clinic_id === c.id));
+      if (!e || (e.price === init.price && e.online === init.online && e.special === init.special)) return [];
+      return [{ clinic_id: c.id, price: toNum(e.price), price_online: toNum(e.online), price_special: toNum(e.special) }];
+    });
+    if (rows.length) savePrices.mutate(rows);
+  };
 
   if (!s) return <div className="muted">Загрузка…</div>;
   const refName = (list: Ref[] | undefined, rid?: number) => list?.find((x) => x.id === rid)?.name_ru ?? "—";
@@ -177,24 +192,28 @@ export default function ServiceDetail() {
           <div className="card">
             <h3>Цены по клиникам</h3>
             <table>
-              <thead><tr><th>Клиника</th><th>Цена</th><th>Online</th><th>Спец.</th>{canEditFin && <th></th>}</tr></thead>
+              <thead><tr><th>Клиника</th><th>Цена</th><th>Online</th><th>Спец.</th></tr></thead>
               <tbody>
-                {(clinics ?? []).map((c) => {
-                  const p = prices?.find((x) => x.clinic_id === c.id);
+                {(clinics ?? []).filter((c) => c.status === "active").map((c) => {
+                  const e = pe[c.id] ?? { price: "", online: "", special: "" };
+                  const upd = (k: keyof PriceEdit, v: string) => setPe((prev) => ({ ...prev, [c.id]: { ...prev[c.id], [k]: v } }));
                   return (
-                    <ServicePriceRow
-                      key={c.id}
-                      clinic={c}
-                      price={p}
-                      canEdit={canEditFin}
-                      pending={savePrice.isPending}
-                      onSave={(price, priceOnline) => savePrice.mutate({ clinicId: c.id, price, priceOnline })}
-                    />
+                    <tr key={c.id}>
+                      <td>{c.name_ru}</td>
+                      <td><input type="number" value={e.price} onChange={(ev) => upd("price", ev.target.value)} style={PRICE_CELL} /></td>
+                      <td><input type="number" value={e.online} onChange={(ev) => upd("online", ev.target.value)} style={PRICE_CELL} /></td>
+                      <td><input type="number" value={e.special} onChange={(ev) => upd("special", ev.target.value)} style={PRICE_CELL} /></td>
+                    </tr>
                   );
                 })}
-                {!clinics?.length && <tr><td colSpan={5} className="muted">Нет клиник</td></tr>}
+                {!clinics?.length && <tr><td colSpan={4} className="muted">Нет клиник</td></tr>}
               </tbody>
             </table>
+            {!!clinics?.length && (
+              <button style={{ marginTop: 12 }} disabled={savePrices.isPending} onClick={submitPrices}>
+                {me!.role === "r1" ? "Сохранить цены" : "Отправить на согласование"}
+              </button>
+            )}
           </div>
         )}
         {me!.role !== "r4" && (
@@ -216,28 +235,12 @@ export default function ServiceDetail() {
   );
 }
 
-function ServicePriceRow({ clinic, price, canEdit, pending, onSave }: {
-  clinic: Ref; price?: Price; canEdit: boolean; pending: boolean;
-  onSave: (price: number, priceOnline?: number) => void;
-}) {
-  const [val, setVal] = useState(price?.price != null ? String(price.price) : "");
-  const [online, setOnline] = useState(price?.price_online != null ? String(price.price_online) : "");
-  return (
-    <tr>
-      <td>{clinic.name_ru}</td>
-      <td>{price?.price ?? "—"} {price?.currency ?? "MDL"}</td>
-      <td>{price?.price_online ?? "—"}</td>
-      <td>{price?.price_special ?? "—"}</td>
-      {canEdit && (
-        <td>
-          <div className="row" style={{ gap: 4 }}>
-            <input type="number" value={val} onChange={(e) => setVal(e.target.value)} placeholder="Цена" style={{ maxWidth: 90 }} />
-            <input type="number" value={online} onChange={(e) => setOnline(e.target.value)} placeholder="Online" style={{ maxWidth: 90 }} />
-            <button className="ghost" style={{ flex: "0 0 auto" }} disabled={!val || pending}
-              onClick={() => onSave(Number(val), online ? Number(online) : undefined)}>OK</button>
-          </div>
-        </td>
-      )}
-    </tr>
-  );
-}
+interface PriceEdit { price: string; online: string; special: string }
+interface PriceRowPayload { clinic_id: number; price?: number; price_online?: number; price_special?: number }
+const PRICE_CELL = { width: 80, padding: "4px 6px" } as const;
+const toNum = (v: string) => (v.trim() === "" ? undefined : Number(v));
+const priceEditOf = (p?: Price): PriceEdit => ({
+  price: p?.price != null ? String(p.price) : "",
+  online: p?.price_online != null ? String(p.price_online) : "",
+  special: p?.price_special != null ? String(p.price_special) : "",
+});

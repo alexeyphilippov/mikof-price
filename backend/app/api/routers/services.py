@@ -1,11 +1,12 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 
 from app.core.db import get_db
 from app.models.models import (
-    Service, ServicePrice, ServiceStatus, UserRole, EntityHistory, User
+    Service, ServicePrice, ServiceStatus, UserRole, EntityHistory, User,
+    Clinic, ClinicStatus,
 )
 from app.schemas.schemas import (
     ServiceOut, ServiceCreate, ServiceUpdate, ServicePriceOut, ServicePriceCreate,
@@ -139,8 +140,31 @@ async def set_price(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles(UserRole.r1, UserRole.r2)),
 ):
+    clinic = await db.get(Clinic, body.clinic_id)
+    if not clinic:
+        raise HTTPException(404, "Клиника не найдена")
+    if clinic.status != ClinicStatus.active:
+        raise HTTPException(400, "Нельзя задать цену для закрытой клиники")
+
+    prev = (await db.execute(select(ServicePrice).where(
+        ServicePrice.service_id == id,
+        ServicePrice.clinic_id == body.clinic_id,
+        ServicePrice.valid_to == None,
+    ))).scalars().all()
+    old = prev[0] if prev else None
+    for p in prev:  # SCD: закрываем все прежние активные записи
+        p.valid_to = func.now()
+    for field in ("price", "price_online", "price_special"):
+        ov, nv = (getattr(old, field) if old else None), getattr(body, field)
+        if ov != nv:
+            db.add(EntityHistory(
+                entity_type="service", entity_id=id,
+                field_name=f"{field} (клиника #{body.clinic_id})",
+                old_value={"v": str(ov)}, new_value={"v": str(nv)}, changed_by=user.id,
+            ))
     obj = ServicePrice(service_id=id, **body.model_dump())
     db.add(obj)
     await db.commit()
     await db.refresh(obj)
+    await log_action(db, user.id, "set_service_price", "service", id)
     return obj
