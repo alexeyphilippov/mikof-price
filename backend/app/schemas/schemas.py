@@ -180,6 +180,7 @@ class ServiceOut(BaseModel):
     note: Optional[str]
     status: str
     created_at: datetime
+    price: Optional[float] = None
     model_config = {"from_attributes": True}
 
 
@@ -272,6 +273,7 @@ class PackageOut(BaseModel):
     created_at: datetime
     items: list[PackageItemOut] = []
     prices: list[PackagePriceOut] = []
+    price: Optional[float] = None
     model_config = {"from_attributes": True}
 
 

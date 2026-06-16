@@ -38,13 +38,14 @@ export default function Services() {
       </div>
       <div className="card">
         <table>
-          <thead><tr><th>Код</th><th>Название</th><th>Длит.</th><th>Статус</th></tr></thead>
+          <thead><tr><th>Код</th><th>Название</th><th>Цена</th><th>Длит.</th><th>Статус</th></tr></thead>
           <tbody>
-            {isLoading && <tr><td colSpan={4} className="muted">Загрузка…</td></tr>}
+            {isLoading && <tr><td colSpan={5} className="muted">Загрузка…</td></tr>}
             {services?.map((s) => (
               <tr key={s.id}>
                 <td><Link to={`/services/${s.id}`}>{s.code}</Link></td>
                 <td>{s.name_ru}</td>
+                <td className="muted">{s.price != null ? `${s.price} MDL` : "—"}</td>
                 <td className="muted">{s.duration_min ? `${s.duration_min} мин` : "—"}</td>
                 <td><span className={`pill ${s.status}`}>{STATUS_NAMES[s.status]}</span></td>
               </tr>

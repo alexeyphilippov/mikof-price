@@ -20,13 +20,14 @@ export default function Packages() {
       {showCreate && <CreatePackageForm onDone={() => setShowCreate(false)} />}
       <div className="card">
         <table>
-          <thead><tr><th>Код</th><th>Название</th><th>Услуг</th><th>Статус</th></tr></thead>
+          <thead><tr><th>Код</th><th>Название</th><th>Цена</th><th>Услуг</th><th>Статус</th></tr></thead>
           <tbody>
-            {isLoading && <tr><td colSpan={4} className="muted">Загрузка…</td></tr>}
+            {isLoading && <tr><td colSpan={5} className="muted">Загрузка…</td></tr>}
             {data?.map((p) => (
               <tr key={p.id}>
                 <td><Link to={`/packages/${p.id}`}>{p.code}</Link></td>
                 <td>{p.name_ru}</td>
+                <td className="muted">{p.price != null ? `${p.price} MDL` : "—"}</td>
                 <td className="muted">{p.items.length}</td>
                 <td><span className={`pill ${p.status}`}>{STATUS_NAMES[p.status]}</span></td>
               </tr>

@@ -20,6 +20,11 @@ _r1 = require_roles(UserRole.r1)
 _r1r3 = require_roles(UserRole.r1, UserRole.r3)
 
 
+async def _chisinau_clinic_id(db: AsyncSession) -> Optional[int]:
+    res = await db.execute(select(Clinic.id).where(Clinic.code == "CLN-001"))
+    return res.scalar_one_or_none()
+
+
 @router.get("", response_model=list[ServiceOut])
 async def list_services(
     group_id: Optional[int] = Query(None),
@@ -44,7 +49,23 @@ async def list_services(
     if filters:
         q = q.where(and_(*filters))
     res = await db.execute(q.order_by(Service.code))
-    return res.scalars().all()
+    services = res.scalars().all()
+    clinic_id = await _chisinau_clinic_id(db)
+    prices: dict[int, float] = {}
+    if clinic_id and services:
+        ids = [s.id for s in services]
+        pr = await db.execute(
+            select(ServicePrice.service_id, ServicePrice.price).where(
+                ServicePrice.service_id.in_(ids),
+                ServicePrice.clinic_id == clinic_id,
+                ServicePrice.valid_to == None,
+            )
+        )
+        prices = {sid: float(p) for sid, p in pr.all() if p is not None}
+    return [
+        ServiceOut.model_validate(s).model_copy(update={"price": prices.get(s.id)})
+        for s in services
+    ]
 
 
 @router.post("", response_model=ServiceOut)

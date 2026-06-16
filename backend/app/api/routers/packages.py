@@ -20,6 +20,11 @@ router = APIRouter(prefix="/api/packages", tags=["packages"])
 _r1 = require_roles(UserRole.r1)
 
 
+async def _chisinau_clinic_id(db: AsyncSession) -> Optional[int]:
+    res = await db.execute(select(Clinic.id).where(Clinic.code == "CLN-001"))
+    return res.scalar_one_or_none()
+
+
 async def _calc_package_price(db: AsyncSession, package_id: int, clinic_id: int) -> Optional[float]:
     """Σ service_prices for all required items in this clinic."""
     items_res = await db.execute(
@@ -45,7 +50,24 @@ async def _calc_package_price(db: AsyncSession, package_id: int, clinic_id: int)
 @router.get("", response_model=list[PackageOut])
 async def list_packages(db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
     res = await db.execute(select(Package).order_by(Package.code))
-    return res.scalars().all()
+    packages = res.scalars().all()
+    clinic_id = await _chisinau_clinic_id(db)
+    prices: dict[int, Optional[float]] = {}
+    if clinic_id and packages:
+        pids = [p.id for p in packages]
+        fixed_res = await db.execute(
+            select(PackagePrice.package_id, PackagePrice.price_fixed).where(
+                PackagePrice.package_id.in_(pids),
+                PackagePrice.clinic_id == clinic_id,
+            )
+        )
+        fixed = {pid: float(pf) for pid, pf in fixed_res.all() if pf is not None}
+        for p in packages:
+            prices[p.id] = fixed.get(p.id) if p.id in fixed else await _calc_package_price(db, p.id, clinic_id)
+    return [
+        PackageOut.model_validate(p).model_copy(update={"price": prices.get(p.id)})
+        for p in packages
+    ]
 
 
 @router.post("", response_model=PackageOut)

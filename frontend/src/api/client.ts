@@ -25,6 +25,7 @@ export interface Service {
   sold_separately: boolean;
   status: string;
   note?: string;
+  price?: number;
 }
 
 export interface Ref { id: number; code: string; name_ru: string; name_ro?: string; status?: string }
@@ -42,6 +43,7 @@ export interface Package {
   group_id?: number; subgroup_id?: number; status: string;
   items: { id: number; service_id: number; inclusion_type: string }[];
   prices: PkgPrice[];
+  price?: number;
 }
 
 export interface Participant { id: number; name: string; role: Role }
