@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useRefs } from "../lib/useRefs";
 import { submitEntityChange, ChangeItem } from "../lib/entityAction";
 import RequestCommentField from "../components/RequestCommentField";
+import { formatDateTime } from "../lib/formatDateTime";
 
 const EDITABLE = [
   { key: "name_ru", label: "Название (RU)" },
@@ -246,7 +247,7 @@ export default function ServiceDetail() {
               {history?.map((h: any) => (
                 <li key={h.id}>
                   <b>{h.field_name}</b>: {h.old_value?.v} → {h.new_value?.v}
-                  <div className="muted">{new Date(h.changed_at).toLocaleString("ru")} · {h.changed_by_name ?? `#${h.changed_by}`}</div>
+                  <div className="muted">{formatDateTime(h.changed_at)} · {h.changed_by_name ?? `#${h.changed_by}`}</div>
                 </li>
               ))}
               {history?.length === 0 && <li className="muted">Изменений нет</li>}

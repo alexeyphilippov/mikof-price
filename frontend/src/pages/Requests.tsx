@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, ChangeRequest, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import SortableTable, { Column } from "../components/SortableTable";
+import { formatDateTime } from "../lib/formatDateTime";
 
 const METRICS = ["pending_cfd", "pending_ceo", "revision", "approved", "cancelled"];
 
@@ -28,7 +29,7 @@ export default function Requests() {
     { key: "author", label: "Автор", value: (r) => r.author_name ?? `#${r.author_id}` },
     { key: "count", label: "Изменений", value: (r) => r.items.length },
     { key: "status", label: "Статус", value: (r) => STATUS_NAMES[r.status] ?? r.status, render: (r) => <span className={`pill ${r.status}`}>{STATUS_NAMES[r.status]}</span> },
-    { key: "updated", label: "Обновлена", value: (r) => Date.parse(r.updated_at), render: (r) => <span className="muted">{new Date(r.updated_at).toLocaleString("ru")}</span> },
+    { key: "updated", label: "Обновлена", value: (r) => Date.parse(r.updated_at), render: (r) => <span className="muted">{formatDateTime(r.updated_at)}</span> },
   ];
 
   const tableRows = statusFilter ? rows.filter((r) => r.status === statusFilter) : rows;
@@ -71,7 +72,7 @@ export default function Requests() {
                     <td><Link to={`/requests/${r.id}`}>{r.title}</Link></td>
                     <td className="muted">{r.author_name ?? `#${r.author_id}`}</td>
                     <td><span className={`pill ${r.status}`}>{STATUS_NAMES[r.status]}</span></td>
-                    <td className="muted">{new Date(r.updated_at).toLocaleString("ru")}</td>
+                    <td className="muted">{formatDateTime(r.updated_at)}</td>
                   </tr>
                 ))}
               </tbody>
