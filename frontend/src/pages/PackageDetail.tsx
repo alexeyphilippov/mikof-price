@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Clinic, Package, Service, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { submitEntityChange, RequestPayload } from "../lib/entityAction";
+import RequestCommentField from "../components/RequestCommentField";
 
 export default function PackageDetail() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function PackageDetail() {
   const [name, setName] = useState("");
   const [svcId, setSvcId] = useState("");
   const [incType, setIncType] = useState("required");
+  const [requestComment, setRequestComment] = useState("");
 
   const { data: p } = useQuery({ queryKey: ["package", id], queryFn: async () => (await api.get<Package>(`/api/packages/${id}`)).data });
   const { data: clinics } = useQuery({ queryKey: ["clinics"], queryFn: async () => (await api.get<Clinic[]>("/api/clinics")).data });
@@ -25,9 +27,10 @@ export default function PackageDetail() {
 
   const act = useMutation({
     mutationFn: async (a: { direct: () => Promise<void>; payload: RequestPayload }) =>
-      submitEntityChange(role, a.direct, a.payload),
+      submitEntityChange(role, a.direct, a.payload, requestComment),
     onSuccess: (reqId) => {
       setEdit(false);
+      setRequestComment("");
       if (reqId) { nav(`/requests/${reqId}`); return; }
       qc.invalidateQueries({ queryKey: ["package", id] });
       qc.invalidateQueries({ queryKey: ["packages"] });
@@ -93,6 +96,11 @@ export default function PackageDetail() {
         </div>
       </div>
       {viaRequest && (canWriteMed || canWriteFin) && <p className="tag">Ваши изменения отправляются на согласование заявкой.</p>}
+      {viaRequest && (canWriteMed || canWriteFin) && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <RequestCommentField value={requestComment} onChange={setRequestComment} />
+        </div>
+      )}
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: "span 2" }}>
           <h3>Состав пакета ({p.items.length})</h3>
