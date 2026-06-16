@@ -52,7 +52,13 @@ export default function RequestDetail() {
   const [editing, setEditing] = useState(false);
   const [editItems, setEditItems] = useState<Record<number, string>>({});
 
-  const { data: r } = useQuery({ queryKey: ["request", id], queryFn: async () => (await api.get<ChangeRequest>(`/api/requests/${id}`)).data });
+  const { data: r } = useQuery({
+    queryKey: ["request", id],
+    queryFn: async () => (await api.get<ChangeRequest>(`/api/requests/${id}`)).data,
+    refetchInterval: 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
   const { groups, subgroups, executors, locations, clinics } = useRefs();
 
   const invalidate = () => {
@@ -81,8 +87,24 @@ export default function RequestDetail() {
   const actErr = act.isError ? ((act.error as any)?.response?.data?.detail ?? "Не удалось выполнить действие") : "";
   const saveErr = saveEdit.isError ? ((saveEdit.error as any)?.response?.data?.detail ?? "Не удалось сохранить") : "";
   const addComment = useMutation({
-    mutationFn: async () => api.post(`/api/requests/${id}/comments`, { text: comment }),
-    onSuccess: () => { setComment(""); invalidate(); },
+    mutationFn: async (text: string) => api.post(`/api/requests/${id}/comments`, { text }),
+    onMutate: async (text) => {
+      setComment("");
+      await qc.cancelQueries({ queryKey: ["request", id] });
+      const prev = qc.getQueryData<ChangeRequest>(["request", id]);
+      if (prev && me) {
+        qc.setQueryData<ChangeRequest>(["request", id], {
+          ...prev,
+          comments: [...prev.comments, {
+            id: -Date.now(), author_id: me.id, author_name: me.name, text,
+            created_at: new Date().toISOString(),
+          }],
+        });
+      }
+      return { prev };
+    },
+    onError: (_e, _text, ctx) => { if (ctx?.prev) qc.setQueryData(["request", id], ctx.prev); },
+    onSuccess: async () => { await qc.refetchQueries({ queryKey: ["request", id] }); },
   });
 
   useEffect(() => {
@@ -286,8 +308,15 @@ export default function RequestDetail() {
           </div>
         ))}
         <div className="row" style={{ marginTop: 12 }}>
-          <input placeholder="Написать комментарий…" value={comment} onChange={(e) => setComment(e.target.value)} />
-          <button style={{ flex: "0 0 auto" }} disabled={!comment} onClick={() => addComment.mutate()}>Отправить</button>
+          <input
+            placeholder="Написать комментарий…"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && comment.trim() && !addComment.isPending) addComment.mutate(comment);
+            }}
+          />
+          <button style={{ flex: "0 0 auto" }} disabled={!comment || addComment.isPending} onClick={() => addComment.mutate(comment)}>Отправить</button>
         </div>
       </div>
     </>
