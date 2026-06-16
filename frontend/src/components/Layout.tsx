@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, ROLE_NAMES, Role } from "../api/client";
 import { useAuth } from "../lib/auth";
+import { usePullToRefresh } from "../lib/usePullToRefresh";
 
 const NAV: { to: string; label: string; roles?: Role[] }[] = [
   { to: "/services", label: "Услуги" },
@@ -18,6 +19,7 @@ export default function Layout() {
   const { me, logout } = useAuth();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
+  const { mobile, pull, refreshing, label, threshold } = usePullToRefresh();
 
   const { data: pending } = useQuery({
     queryKey: ["pending"],
@@ -41,6 +43,16 @@ export default function Layout() {
         <button className="burger" aria-label="Меню" onClick={() => setOpen(true)}>☰</button>
         <div className="brand">mikof<span>ai</span></div>
       </div>
+      {mobile && (
+        <div
+          className={`ptr-indicator${pull > 0 || refreshing ? " visible" : ""}${refreshing ? " refreshing" : ""}`}
+          data-testid="pull-refresh"
+          style={{ opacity: refreshing ? 1 : Math.min(pull / threshold, 1) }}
+          aria-live="polite"
+        >
+          {label}
+        </div>
+      )}
       {open && <div className="backdrop" onClick={close} />}
       <aside className={`sidebar${open ? " open" : ""}`}>
         <div className="brand">mikof<span>ai</span></div>
