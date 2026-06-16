@@ -5,6 +5,7 @@ import { api, ChangeRequest, Ref, ROLE_NAMES, STATUS_NAMES } from "../api/client
 import { useAuth } from "../lib/auth";
 import { useRefs } from "../lib/useRefs";
 import EntityCard from "../components/EntityCard";
+import { formatDateTime } from "../lib/formatDateTime";
 
 const FIELD_LABELS: Record<string, string> = {
   name_ru: "Название (RU)", name_ro: "Название (RO)", duration_min: "Длительность",
@@ -292,7 +293,7 @@ export default function RequestDetail() {
             {r.history.map((h) => (
               <li key={h.id}>
                 {h.from_status ? `${STATUS_NAMES[h.from_status]} → ` : ""}{STATUS_NAMES[h.to_status]}
-                <div className="muted">{h.actor_name ?? `#${h.actor_id}`} · {new Date(h.created_at).toLocaleString("ru")}</div>
+                <div className="muted">{h.actor_name ?? `#${h.actor_id}`} · {formatDateTime(h.created_at)}</div>
               </li>
             ))}
           </ul>
@@ -303,7 +304,7 @@ export default function RequestDetail() {
         <h3>Комментарии</h3>
         {r.comments.map((c) => (
           <div className="comment" key={c.id}>
-            <div className="meta">{c.author_name ?? `#${c.author_id}`} · {new Date(c.created_at).toLocaleString("ru")}</div>
+            <div className="meta">{c.author_name ?? `#${c.author_id}`} · {formatDateTime(c.created_at)}</div>
             {c.text}
           </div>
         ))}

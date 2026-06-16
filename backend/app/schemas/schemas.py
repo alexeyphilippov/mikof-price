@@ -1,8 +1,17 @@
 from __future__ import annotations
 import re
-from datetime import datetime
-from typing import Optional, Any
-from pydantic import BaseModel, EmailStr, field_validator
+from datetime import datetime, timezone
+from typing import Optional, Any, Annotated
+from pydantic import BaseModel, EmailStr, field_validator, PlainSerializer
+
+def _utc_iso(v: datetime) -> str:
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=timezone.utc)
+    else:
+        v = v.astimezone(timezone.utc)
+    return v.isoformat().replace("+00:00", "Z")
+
+UtcDatetime = Annotated[datetime, PlainSerializer(_utc_iso, return_type=str)]
 
 _PHONE_RE = re.compile(r"^[+\d][\d\s()\-]{4,}$")
 _CODE_RE = re.compile(r"^[A-Z]-\d{3}-[A-Z:]+-\d{3}$")
@@ -149,8 +158,8 @@ class ServicePriceOut(BaseModel):
     price_cmn: Optional[float]
     price_online: Optional[float]
     price_special: Optional[float]
-    valid_from: datetime
-    valid_to: Optional[datetime]
+    valid_from: UtcDatetime
+    valid_to: Optional[UtcDatetime]
     model_config = {"from_attributes": True}
 
 
@@ -179,7 +188,7 @@ class ServiceOut(BaseModel):
     is_surgery_addon: bool
     note: Optional[str]
     status: str
-    created_at: datetime
+    created_at: UtcDatetime
     price: Optional[float] = None
     model_config = {"from_attributes": True}
 
@@ -270,7 +279,7 @@ class PackageOut(BaseModel):
     group_id: Optional[int]
     subgroup_id: Optional[int]
     status: str
-    created_at: datetime
+    created_at: UtcDatetime
     items: list[PackageItemOut] = []
     prices: list[PackagePriceOut] = []
     price: Optional[float] = None
@@ -309,7 +318,7 @@ class RequestCommentOut(BaseModel):
     author_id: int
     author_name: Optional[str] = None
     text: str
-    created_at: datetime
+    created_at: UtcDatetime
     model_config = {"from_attributes": True}
 
 
@@ -320,7 +329,7 @@ class RequestHistoryOut(BaseModel):
     actor_id: int
     actor_name: Optional[str] = None
     note: Optional[str]
-    created_at: datetime
+    created_at: UtcDatetime
     model_config = {"from_attributes": True}
 
 
@@ -339,8 +348,8 @@ class ChangeRequestOut(BaseModel):
     author_role: Optional[str] = None
     participants: list[ParticipantOut] = []
     note: Optional[str]
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
     items: list[ChangeRequestItemOut] = []
     comments: list[RequestCommentOut] = []
     history: list[RequestHistoryOut] = []
@@ -384,7 +393,7 @@ class EntityHistoryOut(BaseModel):
     new_value: Optional[Any]
     changed_by: int
     changed_by_name: Optional[str] = None
-    changed_at: datetime
+    changed_at: UtcDatetime
     model_config = {"from_attributes": True}
 
 
@@ -396,7 +405,7 @@ class AuditLogOut(BaseModel):
     entity_type: Optional[str]
     entity_id: Optional[int]
     ip: Optional[str]
-    created_at: datetime
+    created_at: UtcDatetime
     model_config = {"from_attributes": True}
 
 
