@@ -395,14 +395,25 @@ async def reject_request(
     if user.role == UserRole.r2 and req.status == RequestStatus.pending_cfd:
         req.status = RequestStatus.revision
     elif user.role == UserRole.r1 and req.status == RequestStatus.pending_ceo:
-        req.status = RequestStatus.pending_cfd if body.send_to == "r2" else RequestStatus.revision
+        if body.final:
+            req.status = RequestStatus.rejected
+        elif body.send_to == "r2":
+            req.status = RequestStatus.pending_cfd
+        elif body.send_to == "r3":
+            req.status = RequestStatus.revision
+        else:
+            raise HTTPException(400, "Invalid transition")
     else:
         raise HTTPException(400, "Invalid transition")
     db.add(RequestHistory(request_id=id, from_status=old, to_status=req.status.value, actor_id=user.id, note=body.note))
     await db.commit()
     await db.refresh(req)
-    bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} возвращена на доработку",
-                f"Заявка «{req.title}» возвращена на доработку. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
+    if req.status == RequestStatus.rejected:
+        bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id}: отклонена",
+                    f"Заявка «{req.title}» отклонена гендиректором. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
+    else:
+        bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} возвращена на доработку",
+                    f"Заявка «{req.title}» возвращена на доработку. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
     return req
 
 

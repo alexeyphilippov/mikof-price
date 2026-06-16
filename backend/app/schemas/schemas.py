@@ -364,6 +364,7 @@ class RequestApproveInput(BaseModel):
 class RequestRejectInput(BaseModel):
     note: Optional[str] = None
     send_to: Optional[str] = None  # "r2" | "r3" (для R1)
+    final: bool = False  # R1 на pending_ceo: финальное отклонение → rejected
 
 
 class CommentCreate(BaseModel):
