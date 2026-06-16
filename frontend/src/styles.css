@@ -144,10 +144,10 @@ th.sortable:hover { color: var(--ink); }
 
 /* Мобильная шапка с бургером и затемнение — только на узких экранах */
 .mobile-bar { display: none; }
-.backdrop { display: none; }
+.pull-hint { text-align: center; padding: 6px; font-size: 13px; }
 
 /* ── Адаптив: планшеты, iPhone 13 Pro Max (428×926 портрет, 926×428 ландшафт) ── */
-@media (max-width: 960px) {
+@media (max-width: 768px) {
   html, body { overflow-x: clip; }
   .layout { flex-direction: column; align-items: stretch; }
 

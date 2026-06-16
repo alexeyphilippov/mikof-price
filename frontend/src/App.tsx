@@ -16,9 +16,18 @@ import Users from "./pages/Users";
 import Audit from "./pages/Audit";
 import Profile from "./pages/Profile";
 
+function LoadingShell() {
+  return (
+    <div className="layout">
+      <aside className="sidebar"><div className="brand">mikof<span>ai</span></div></aside>
+      <main className="main"><div className="card muted">Загрузка…</div></main>
+    </div>
+  );
+}
+
 function Guard({ roles, children }: { roles?: Role[]; children: JSX.Element }) {
   const { me, loading } = useAuth();
-  if (loading) return <div className="login-wrap">Загрузка…</div>;
+  if (loading) return <LoadingShell />;
   if (!me) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(me.role)) return <Navigate to="/" replace />;
   return children;
@@ -26,7 +35,7 @@ function Guard({ roles, children }: { roles?: Role[]; children: JSX.Element }) {
 
 export default function App() {
   const { me, loading } = useAuth();
-  if (loading) return <div className="login-wrap">Загрузка…</div>;
+  if (loading) return <LoadingShell />;
 
   return (
     <Routes>

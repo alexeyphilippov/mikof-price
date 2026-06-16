@@ -22,11 +22,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "python -m scripts.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "alembic upgrade head && python -m scripts.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
       interval: 15s
@@ -41,21 +39,19 @@ services:
       SMTP_LOGIN: ${SMTP_LOGIN}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       MAIL_FROM: ${MAIL_FROM:-noreply@mikofai.ru}
+      SMTP_CA_FILE: ${SMTP_CA_FILE:-}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
       interval: 30s
       retries: 5
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: prod
     restart: always
-    environment:
-      BACKEND_URL: http://backend:8000
     ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "5173:80"
     depends_on:
       - backend
 

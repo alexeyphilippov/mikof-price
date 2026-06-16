@@ -25,6 +25,14 @@ export interface Service {
   sold_separately: boolean;
   status: string;
   note?: string;
+  price?: number;
+}
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface Ref { id: number; code: string; name_ru: string; name_ro?: string; status?: string }
@@ -39,7 +47,7 @@ export interface PkgPrice { id: number; clinic_id: number; currency: string; pri
 
 export interface Package {
   id: number; code: string; name_ru: string; name_ro?: string;
-  group_id?: number; subgroup_id?: number; status: string;
+  group_id?: number; subgroup_id?: number; status: string; price?: number;
   items: { id: number; service_id: number; inclusion_type: string }[];
   prices: PkgPrice[];
 }
@@ -48,7 +56,7 @@ export interface Participant { id: number; name: string; role: Role }
 
 export interface ChangeRequest {
   id: number; title: string; status: string; author_id: number; author_name?: string;
-  participants?: Participant[]; note?: string;
+  author_role?: Role; participants?: Participant[]; note?: string;
   created_at: string; updated_at: string;
   items: { id: number; entity_type: string; entity_id?: number; field_name: string; old_value: any; new_value: any; r2_override_value: any }[];
   comments: { id: number; author_id: number; author_name?: string; text: string; created_at: string }[];

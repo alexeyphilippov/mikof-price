@@ -1,9 +1,4 @@
-"""Отдельный контейнер отправки почты (Н8).
-
-Принимает POST /send {to, subject, body} и отправляет письмо через TLS-SMTP.
-В локальной среде внешний SMTP может быть недоступен — ошибка логируется,
-но не роняет вызывающий сервис (отправка идёт фоном со стороны backend).
-"""
+"""Отдельный контейнер отправки почты (Н8)."""
 import logging
 import os
 import smtplib
@@ -23,6 +18,13 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "1127"))
 SMTP_LOGIN = os.getenv("SMTP_LOGIN", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 FROM_ADDR = os.getenv("MAIL_FROM", "noreply@mikofai.ru")
+SMTP_CA_FILE = os.getenv("SMTP_CA_FILE", "")
+
+
+def _ssl_context() -> ssl.SSLContext:
+    if SMTP_CA_FILE and os.path.isfile(SMTP_CA_FILE):
+        return ssl.create_default_context(cafile=SMTP_CA_FILE)
+    return ssl.create_default_context()
 
 
 class Mail(BaseModel):
@@ -47,13 +49,12 @@ def send(mail: Mail):
     if mail.html:
         msg.add_alternative(mail.html, subtype="html")
     try:
-        # Провайдер (selcloud) использует самоподписанный сертификат на порту 1127
-        ctx = ssl._create_unverified_context()  # noqa: SLF001
+        ctx = _ssl_context()
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx, timeout=15) as s:
             s.login(SMTP_LOGIN, SMTP_PASSWORD)
             s.send_message(msg)
         logger.info("sent to %s: %s", mail.to, mail.subject)
         return {"sent": True}
-    except Exception as e:  # noqa: BLE001 — деградируем мягко в локальной среде
+    except Exception as e:  # noqa: BLE001
         logger.error("SMTP failed to %s: %s", mail.to, e)
         return {"sent": False, "error": str(e)}

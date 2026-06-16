@@ -1,15 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, Package, Ref, Service, STATUS_NAMES } from "../api/client";
+import { api, Package, Page, Ref, Service } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { submitEntityChange } from "../lib/entityAction";
 
+const PAGE = 50;
+
 export default function Packages() {
   const { me } = useAuth();
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const canCreate = me!.role !== "r4";
-  const { data, isLoading } = useQuery({ queryKey: ["packages"], queryFn: async () => (await api.get<Package[]>("/api/packages")).data });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["packages", search, offset],
+    queryFn: async () => {
+      const p = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
+      if (search) p.set("search", search);
+      return (await api.get<Page<Package>>(`/api/packages?${p}`)).data;
+    },
+  });
+
+  useEffect(() => { setOffset(0); }, [search]);
+
+  const total = data?.total ?? 0;
+  const page = Math.floor(offset / PAGE) + 1;
+  const pages = Math.max(1, Math.ceil(total / PAGE));
 
   return (
     <>
@@ -17,22 +35,34 @@ export default function Packages() {
         <h1>Пакеты услуг</h1>
         {canCreate && <button onClick={() => setShowCreate(!showCreate)}>{showCreate ? "Скрыть форму" : "Создать пакет"}</button>}
       </div>
+      <div className="toolbar">
+        <input placeholder="Поиск по коду или названию…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Поиск по коду или названию" />
+        <span className="muted" style={{ marginLeft: "auto" }}>Найдено: {total}</span>
+      </div>
       {showCreate && <CreatePackageForm onDone={() => setShowCreate(false)} />}
       <div className="card">
         <table>
-          <thead><tr><th>Код</th><th>Название</th><th>Услуг</th><th>Статус</th></tr></thead>
+          <thead><tr><th>Код</th><th>Название</th><th>Цена (Кишинёв)</th><th>Услуг</th><th>Статус</th></tr></thead>
           <tbody>
-            {isLoading && <tr><td colSpan={4} className="muted">Загрузка…</td></tr>}
-            {data?.map((p) => (
+            {isLoading && <tr><td colSpan={5} className="muted">Загрузка…</td></tr>}
+            {data?.items.map((p) => (
               <tr key={p.id}>
                 <td><Link to={`/packages/${p.id}`}>{p.code}</Link></td>
                 <td>{p.name_ru}</td>
+                <td className="muted">{p.price != null ? `${p.price} MDL` : "—"}</td>
                 <td className="muted">{p.items.length}</td>
-                <td><span className={`pill ${p.status}`}>{STATUS_NAMES[p.status]}</span></td>
+                <td><span className={`pill ${p.status}`}>{p.status}</span></td>
               </tr>
             ))}
           </tbody>
         </table>
+        {pages > 1 && (
+          <div className="row" style={{ marginTop: 12, justifyContent: "center", gap: 8 }}>
+            <button className="ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>← Назад</button>
+            <span className="muted">{page} / {pages}</span>
+            <button className="ghost" disabled={offset + PAGE >= total} onClick={() => setOffset(offset + PAGE)}>Далее →</button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -51,7 +81,10 @@ function CreatePackageForm({ onDone }: { onDone: () => void }) {
   const [err, setErr] = useState("");
 
   const { data: groups } = useQuery({ queryKey: ["groups"], queryFn: async () => (await api.get<Ref[]>("/api/groups")).data });
-  const { data: services } = useQuery({ queryKey: ["services-all"], queryFn: async () => (await api.get<Service[]>("/api/services")).data });
+  const { data: services } = useQuery({
+    queryKey: ["services-picker"],
+    queryFn: async () => (await api.get<Page<Service>>("/api/services?limit=200")).data.items,
+  });
 
   const addItem = () => {
     const svc = services?.find((s) => s.id === Number(svcId));
@@ -85,24 +118,24 @@ function CreatePackageForm({ onDone }: { onDone: () => void }) {
     <div className="card" style={{ marginBottom: 16 }}>
       <h3>Новый пакет {viaRequest && <span className="tag">(будет отправлен на согласование)</span>}</h3>
       <div className="row">
-        <div className="field"><label>Код *</label><input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="G-001-PAK-XXX" /></div>
-        <div className="field"><label>Название (RU) *</label><input value={form.name_ru} onChange={(e) => setForm({ ...form, name_ru: e.target.value })} /></div>
-        <div className="field"><label>Группа</label>
-          <select value={form.group_id} onChange={(e) => setForm({ ...form, group_id: e.target.value })}>
+        <div className="field"><label htmlFor="pkg-code">Код *</label><input id="pkg-code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="G-001-PAK-XXX" /></div>
+        <div className="field"><label htmlFor="pkg-name">Название (RU) *</label><input id="pkg-name" value={form.name_ru} onChange={(e) => setForm({ ...form, name_ru: e.target.value })} /></div>
+        <div className="field"><label htmlFor="pkg-group">Группа</label>
+          <select id="pkg-group" value={form.group_id} onChange={(e) => setForm({ ...form, group_id: e.target.value })}>
             <option value="">—</option>
             {groups?.map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name_ru}</option>)}
           </select>
         </div>
       </div>
       <div className="row" style={{ alignItems: "flex-end" }}>
-        <div style={{ flex: 2 }}><label>Услуга</label>
-          <select value={svcId} onChange={(e) => setSvcId(e.target.value)}>
+        <div style={{ flex: 2 }}><label htmlFor="pkg-svc">Услуга</label>
+          <select id="pkg-svc" value={svcId} onChange={(e) => setSvcId(e.target.value)}>
             <option value="">— выберите —</option>
             {services?.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name_ru}</option>)}
           </select>
         </div>
-        <div><label>Тип включения</label>
-          <select value={incType} onChange={(e) => setIncType(e.target.value)}>
+        <div><label htmlFor="pkg-inc">Тип включения</label>
+          <select id="pkg-inc" value={incType} onChange={(e) => setIncType(e.target.value)}>
             <option value="required">Обязательная</option>
             <option value="by_prescription">По назначению</option>
           </select>

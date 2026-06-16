@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ROLE_NAMES, Role } from "../api/client";
 import { useAuth } from "../lib/auth";
 
@@ -17,7 +17,10 @@ const NAV: { to: string; label: string; roles?: Role[] }[] = [
 export default function Layout() {
   const { me, logout } = useAuth();
   const nav = useNavigate();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const touchY = useRef(0);
 
   const { data: pending } = useQuery({
     queryKey: ["pending"],
@@ -25,6 +28,20 @@ export default function Layout() {
     enabled: !!me && me.role !== "r4",
     refetchInterval: 20000,
   });
+
+  const refresh = () => qc.invalidateQueries();
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0) touchY.current = e.touches[0].clientY;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (window.scrollY > 0) return;
+    const dy = e.touches[0].clientY - touchY.current;
+    if (dy > 60) setPulling(true);
+  };
+  const onTouchEnd = () => {
+    if (pulling) { refresh(); setPulling(false); }
+  };
 
   const doLogout = async () => {
     await logout();
@@ -61,7 +78,10 @@ export default function Layout() {
           <button className="ghost" style={{ width: "100%" }} onClick={doLogout}>Выйти</button>
         </div>
       </aside>
-      <main className="main"><Outlet /></main>
+      <main className="main" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        {pulling && <div className="pull-hint muted">Обновление…</div>}
+        <Outlet />
+      </main>
     </div>
   );
 }

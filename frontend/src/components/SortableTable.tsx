@@ -58,6 +58,7 @@ export default function SortableTable<T>({
             <th key={c.key}>
               {c.filter === false ? null : (
                 <input
+                  aria-label={`Фильтр: ${c.label}`}
                   value={filters[c.key] ?? ""}
                   onChange={(e) => setFilters({ ...filters, [c.key]: e.target.value })}
                   placeholder="фильтр"

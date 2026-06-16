@@ -10,6 +10,12 @@ from app.auth.auth import decode_access_token
 from app.models.models import User, UserRole, AuditLog
 
 
+def client_ip(request: Request) -> str | None:
+    if not request.client:
+        return None
+    return request.client.host
+
+
 async def get_current_user(
     request: Request,
     access_token: str = Cookie(None),
@@ -25,6 +31,8 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    if payload.get("ver", 0) != user.token_version:
+        raise HTTPException(status_code=401, detail="Token revoked")
     return user
 
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, Clinic, Package, Service, STATUS_NAMES } from "../api/client";
+import { api, Clinic, Package, Service, Page, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { submitEntityChange, RequestPayload } from "../lib/entityAction";
 
@@ -21,7 +21,10 @@ export default function PackageDetail() {
 
   const { data: p } = useQuery({ queryKey: ["package", id], queryFn: async () => (await api.get<Package>(`/api/packages/${id}`)).data });
   const { data: clinics } = useQuery({ queryKey: ["clinics"], queryFn: async () => (await api.get<Clinic[]>("/api/clinics")).data });
-  const { data: services } = useQuery({ queryKey: ["services-all"], queryFn: async () => (await api.get<Service[]>("/api/services")).data });
+  const { data: services } = useQuery({
+    queryKey: ["services-all"],
+    queryFn: async () => (await api.get<Page<Service>>("/api/services?limit=500")).data.items,
+  });
 
   const act = useMutation({
     mutationFn: async (a: { direct: () => Promise<void>; payload: RequestPayload }) =>

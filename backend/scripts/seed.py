@@ -14,7 +14,7 @@ from openpyxl import load_workbook
 from sqlalchemy import select
 
 from app.auth.auth import hash_password
-from app.core.db import AsyncSessionLocal, Base, engine
+from app.core.db import AsyncSessionLocal
 from app.models.models import (
     Clinic, ClinicStatus, Executor, Location, Package, PackageItem,
     Service, ServiceGroup, ServicePrice, ServiceStatus, ServiceSubgroup,
@@ -83,14 +83,6 @@ def _duration(v):
 
 
 async def seed():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Идемпотентно добавить status в справочники для уже существующих БД (зам.9)
-        for t in ("service_groups", "service_subgroups", "executors", "locations"):
-            await conn.exec_driver_sql(
-                f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active'"
-            )
-
     entities = json.loads((DATA / "extracted_entities.json").read_text(encoding="utf-8"))
 
     async with AsyncSessionLocal() as db:
@@ -124,7 +116,7 @@ async def seed():
             db.add(c)
 
         admin = User(email=settings.admin_email, password_hash=hash_password(settings.admin_password),
-                     name="Генеральный директор", role=UserRole.r1, is_active=True)
+                     name="Филиппов Алексей", role=UserRole.r1, is_active=True)
         db.add(admin)
         for email, name, role in USERS:
             db.add(User(email=email, password_hash=hash_password(settings.seed_password),

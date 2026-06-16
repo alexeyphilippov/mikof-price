@@ -6,6 +6,24 @@
   "schemaVersion": 39,
   "refresh": "30s",
   "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "user",
+        "label": "Пользователь",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+        "query": "SELECT name AS __text, id::text AS __value FROM users ORDER BY name",
+        "definition": "SELECT name AS __text, id::text AS __value FROM users ORDER BY name",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": "-1",
+        "current": { "selected": true, "text": "All", "value": "$__all" }
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -72,11 +90,28 @@
       ]
     },
     {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Активность выбранных пользователей (по типам действий)",
+      "description": "Фильтр «Пользователь» вверху дашборда",
+      "datasource": { "type": "postgres", "uid": "mikofai_pg" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(a.created_at,'1h'), action AS metric, count(*) AS value FROM audit_log a WHERE $__timeFilter(a.created_at) AND (-1 IN (${user:csv}) OR a.user_id IN (${user:csv})) GROUP BY 1, action ORDER BY 1",
+          "datasource": { "type": "postgres", "uid": "mikofai_pg" }
+        }
+      ]
+    },
+    {
       "id": 5,
       "type": "table",
       "title": "Самые активные пользователи",
       "datasource": { "type": "postgres", "uid": "mikofai_pg" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 14 },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 23 },
       "targets": [
         {
           "refId": "A",
@@ -92,7 +127,7 @@
       "type": "table",
       "title": "Заявки по статусам",
       "datasource": { "type": "postgres", "uid": "mikofai_pg" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 14 },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 23 },
       "targets": [
         {
           "refId": "A",

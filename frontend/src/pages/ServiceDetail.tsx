@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, Price, Ref, Service, STATUS_NAMES } from "../api/client";
+import { api, Price, Ref, Service, Page, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { useRefs } from "../lib/useRefs";
+import { fmtDate } from "../lib/dates";
 import { submitEntityChange, ChangeItem } from "../lib/entityAction";
 
 const EDITABLE = [
@@ -223,7 +224,7 @@ export default function ServiceDetail() {
               {history?.map((h: any) => (
                 <li key={h.id}>
                   <b>{h.field_name}</b>: {h.old_value?.v} → {h.new_value?.v}
-                  <div className="muted">{new Date(h.changed_at).toLocaleString("ru")} · {h.changed_by_name ?? `#${h.changed_by}`}</div>
+                  <div className="muted">{fmtDate(h.changed_at)} · {h.changed_by_name ?? `#${h.changed_by}`}</div>
                 </li>
               ))}
               {history?.length === 0 && <li className="muted">Изменений нет</li>}

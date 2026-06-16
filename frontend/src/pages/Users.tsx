@@ -58,16 +58,16 @@ export default function Users() {
         </div>
         <div className="card">
           <h3>Новый пользователь</h3>
-          <div className="field"><label>Email</label><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-          <div className="field"><label>Имя</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-          <div className="field"><label>Роль</label>
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+          <div className="field"><label htmlFor="user-email">Email</label><input id="user-email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+          <div className="field"><label htmlFor="user-name">Имя</label><input id="user-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="field"><label htmlFor="user-role">Роль</label>
+            <select id="user-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
               {Object.entries(ROLE_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
-          <div className="field"><label>Пароль</label>
+          <div className="field"><label htmlFor="user-password">Пароль</label>
             <div className="row" style={{ gap: 6 }}>
-              <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <input id="user-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
               <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => navigator.clipboard?.writeText(form.password)}>Копировать</button>
               <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setForm({ ...form, password: genPassword() })}>Сгенерировать</button>
             </div>
@@ -90,9 +90,9 @@ export default function Users() {
             Можно задать <b>новый</b> пароль и скопировать его сейчас (после закрытия он будет недоступен).
           </p>
           <div className="field">
-            <label>Новый пароль</label>
+            <label htmlFor="pw-new">Новый пароль</label>
             <div className="row" style={{ gap: 6 }}>
-              <input value={pwValue} onChange={(e) => { setPwValue(e.target.value); setPwDone(false); }} />
+              <input id="pw-new" value={pwValue} onChange={(e) => { setPwValue(e.target.value); setPwDone(false); }} />
               <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => navigator.clipboard?.writeText(pwValue)}>Копировать</button>
               <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => { setPwValue(genPassword()); setPwDone(false); }}>Сгенерировать</button>
             </div>

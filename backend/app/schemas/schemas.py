@@ -1,8 +1,8 @@
 from __future__ import annotations
 import re
-from datetime import datetime
-from typing import Optional, Any
-from pydantic import BaseModel, EmailStr, field_validator
+from datetime import datetime, timezone
+from typing import Optional, Any, Generic, TypeVar
+from pydantic import BaseModel, EmailStr, field_validator, field_serializer
 
 _PHONE_RE = re.compile(r"^[+\d][\d\s()\-]{4,}$")
 _CODE_RE = re.compile(r"^[A-Z]-\d{3}-[A-Z:]+-\d{3}$")
@@ -14,6 +14,47 @@ def _validate_phone(v: Optional[str]) -> Optional[str]:
     if v and not _PHONE_RE.match(v):
         raise ValueError("Телефон может содержать только цифры, пробелы и + - ( )")
     return v
+
+
+def _utc_iso(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+T = TypeVar("T")
+
+
+class PageOut(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    limit: int
+    offset: int
+
+
+_ITEM_TYPES = frozenset({
+    "service", "service_create", "service_price", "package", "package_create", "package_price",
+    "package_item_add", "package_item_remove",
+    "group", "subgroup", "executor", "location", "clinic",
+    "group_create", "subgroup_create", "executor_create", "location_create", "clinic_create",
+})
+
+
+class ChangeRequestItemIn(BaseModel):
+    entity_type: str
+    entity_id: Optional[int] = None
+    field_name: str
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+
+    @field_validator("entity_type")
+    @classmethod
+    def _check_type(cls, v: str) -> str:
+        if v not in _ITEM_TYPES:
+            raise ValueError(f"Недопустимый тип изменения: {v}")
+        return v
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -179,8 +220,13 @@ class ServiceOut(BaseModel):
     is_surgery_addon: bool
     note: Optional[str]
     status: str
+    price: Optional[float] = None
     created_at: datetime
     model_config = {"from_attributes": True}
+
+    @field_serializer("created_at")
+    def _ser_created(self, v: datetime) -> str:
+        return _utc_iso(v)
 
 
 class ServiceCreate(BaseModel):
@@ -269,10 +315,15 @@ class PackageOut(BaseModel):
     group_id: Optional[int]
     subgroup_id: Optional[int]
     status: str
+    price: Optional[float] = None
     created_at: datetime
     items: list[PackageItemOut] = []
     prices: list[PackagePriceOut] = []
     model_config = {"from_attributes": True}
+
+    @field_serializer("created_at")
+    def _ser_created(self, v: datetime) -> str:
+        return _utc_iso(v)
 
 
 class PackageCreate(BaseModel):
@@ -310,6 +361,10 @@ class RequestCommentOut(BaseModel):
     created_at: datetime
     model_config = {"from_attributes": True}
 
+    @field_serializer("created_at")
+    def _ser_created(self, v: datetime) -> str:
+        return _utc_iso(v)
+
 
 class RequestHistoryOut(BaseModel):
     id: int
@@ -320,6 +375,10 @@ class RequestHistoryOut(BaseModel):
     note: Optional[str]
     created_at: datetime
     model_config = {"from_attributes": True}
+
+    @field_serializer("created_at")
+    def _ser_created(self, v: datetime) -> str:
+        return _utc_iso(v)
 
 
 class ParticipantOut(BaseModel):
@@ -334,6 +393,7 @@ class ChangeRequestOut(BaseModel):
     status: str
     author_id: int
     author_name: Optional[str] = None
+    author_role: Optional[str] = None
     participants: list[ParticipantOut] = []
     note: Optional[str]
     created_at: datetime
@@ -343,11 +403,21 @@ class ChangeRequestOut(BaseModel):
     history: list[RequestHistoryOut] = []
     model_config = {"from_attributes": True}
 
+    @field_serializer("created_at", "updated_at")
+    def _ser_dt(self, v: datetime) -> str:
+        return _utc_iso(v)
+
 
 class ChangeRequestCreate(BaseModel):
     title: str
     note: Optional[str] = None
-    items: list[dict] = []
+    items: list[ChangeRequestItemIn] = []
+
+
+class ChangeRequestUpdate(BaseModel):
+    title: Optional[str] = None
+    note: Optional[str] = None
+    items: Optional[list[ChangeRequestItemIn]] = None
 
 
 class RequestApproveInput(BaseModel):
@@ -358,6 +428,7 @@ class RequestApproveInput(BaseModel):
 class RequestRejectInput(BaseModel):
     note: Optional[str] = None
     send_to: Optional[str] = None  # "r2" | "r3" (для R1)
+    final: bool = False  # R1: окончательное отклонение
 
 
 class CommentCreate(BaseModel):
@@ -377,6 +448,10 @@ class EntityHistoryOut(BaseModel):
     changed_at: datetime
     model_config = {"from_attributes": True}
 
+    @field_serializer("changed_at")
+    def _ser_changed(self, v: datetime) -> str:
+        return _utc_iso(v)
+
 
 class AuditLogOut(BaseModel):
     id: int
@@ -388,6 +463,10 @@ class AuditLogOut(BaseModel):
     ip: Optional[str]
     created_at: datetime
     model_config = {"from_attributes": True}
+
+    @field_serializer("created_at")
+    def _ser_created(self, v: datetime) -> str:
+        return _utc_iso(v)
 
 
 class PendingCount(BaseModel):

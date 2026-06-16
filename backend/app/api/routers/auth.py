@@ -12,7 +12,7 @@ from app.auth.auth import (
     verify_password, create_access_token, create_refresh_token, hash_token
 )
 from app.schemas.schemas import LoginRequest, UserOut
-from app.api.deps import get_current_user, log_action
+from app.api.deps import get_current_user, log_action, client_ip
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -32,7 +32,7 @@ async def login(
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    access = create_access_token(user.id, user.role.value)
+    access = create_access_token(user.id, user.role.value, user.token_version)
     raw_refresh, expires = create_refresh_token(user.id)
 
     db.add(RefreshToken(
@@ -41,7 +41,7 @@ async def login(
         expires_at=expires,
     ))
     await db.execute(
-        update(User).where(User.id == user.id).values(last_login=datetime.utcnow())
+        update(User).where(User.id == user.id).values(last_login=datetime.now(timezone.utc))
     )
     await db.commit()
 
@@ -49,7 +49,7 @@ async def login(
     response.set_cookie("access_token", access, httponly=True, samesite="lax", secure=secure)
     response.set_cookie("refresh_token", raw_refresh, httponly=True, samesite="lax", secure=secure)
     response.set_cookie("XSRF-TOKEN", secrets.token_urlsafe(32), httponly=False, samesite="lax", secure=secure)
-    await log_action(db, user.id, "login", ip=request.client.host)
+    await log_action(db, user.id, "login", ip=client_ip(request))
     return {"ok": True}
 
 
@@ -61,19 +61,14 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ):
     if refresh_token:
-        await db.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == hash_token(refresh_token),
-                RefreshToken.user_id == user.id,
-            )
-        )
         rt_res = await db.execute(
             select(RefreshToken).where(RefreshToken.token_hash == hash_token(refresh_token))
         )
         rt = rt_res.scalar_one_or_none()
         if rt:
             rt.revoked = True
-            await db.commit()
+    user.token_version += 1
+    await db.commit()
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     response.delete_cookie("XSRF-TOKEN")
@@ -95,13 +90,14 @@ async def refresh(
         )
     )
     rt = result.scalar_one_or_none()
-    if not rt or rt.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    exp = rt.expires_at.replace(tzinfo=timezone.utc) if rt and rt.expires_at.tzinfo is None else rt.expires_at
+    if not rt or exp < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Refresh token invalid or expired")
     user_res = await db.execute(select(User).where(User.id == rt.user_id, User.is_active == True))
     user = user_res.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    access = create_access_token(user.id, user.role.value)
+    access = create_access_token(user.id, user.role.value, user.token_version)
     response.set_cookie("access_token", access, httponly=True, samesite="lax", secure=settings.cookie_secure)
     return {"ok": True}
 

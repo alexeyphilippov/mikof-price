@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str
     secret_key: str
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
     smtp_host: str = ""
     smtp_port: int = 1127
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     admin_password: str
     seed_password: str
     mailer_url: str = "http://mailer:8001"
-    cookie_secure: bool = False
+    cookie_secure: bool = True
     cors_origins: str = "http://localhost:5173"
     login_rate_limit: str = "5/minute"
     app_base_url: str = "https://mikofai.ru"

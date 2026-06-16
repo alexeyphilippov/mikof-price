@@ -1,7 +1,7 @@
 import enum
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select, func
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles, log_action
@@ -33,7 +33,9 @@ from app.services.request_email import render_approval_email
 from app.schemas.schemas import (
     ChangeRequestCreate,
     ChangeRequestOut,
+    ChangeRequestUpdate,
     CommentCreate,
+    PageOut,
     PendingCount,
     RequestApproveInput,
     RequestRejectInput,
@@ -57,10 +59,11 @@ R3_SERVICE_FIELDS = frozenset({
 R3_PACKAGE_FIELDS = frozenset({"name_ru", "name_ro", "status"})
 
 
-def _assert_items_allowed(role: UserRole, items: list[dict]) -> None:
+def _assert_items_allowed(role: UserRole, items: list) -> None:
     for item in items:
-        et = item.get("entity_type", "")
-        fn = item.get("field_name", "")
+        data = item.model_dump() if hasattr(item, "model_dump") else item
+        et = data.get("entity_type", "")
+        fn = data.get("field_name", "")
         if role == UserRole.r2:
             if et not in R2_FINANCIAL:
                 raise HTTPException(403, f"Тип изменения «{et}» недоступен финансовому директору")
@@ -167,7 +170,8 @@ async def _apply_request(db: AsyncSession, req: ChangeRequest, actor_id: int):
                 if svc:
                     _set_field(db, svc, "service", "status", ServiceStatus.active, actor_id)
             else:
-                db.add(Service(**data, created_by=actor_id, status=ServiceStatus.active))
+                db.add(Service(**{k: v for k, v in data.items() if hasattr(Service, k)},
+                         created_by=actor_id, status=ServiceStatus.active))
         elif et == "package_create":
             items_data = data.pop("items", [])
             pkg = Package(**data, created_by=actor_id)
@@ -212,10 +216,12 @@ async def _apply_request(db: AsyncSession, req: ChangeRequest, actor_id: int):
                                        if k in _PRICE_FIELDS + ("service_id", "clinic_id")}))
 
 
-@router.get("", response_model=list[ChangeRequestOut])
+@router.get("", response_model=PageOut[ChangeRequestOut])
 async def list_requests(
     status: str | None = None,
     author_id: int | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles(UserRole.r1, UserRole.r2, UserRole.r3)),
 ):
@@ -224,8 +230,9 @@ async def list_requests(
         query = query.where(ChangeRequest.status == status)
     if author_id:
         query = query.where(ChangeRequest.author_id == author_id)
-    result = await db.execute(query.order_by(ChangeRequest.updated_at.desc()))
-    return result.scalars().all()
+    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
+    result = await db.execute(query.order_by(ChangeRequest.updated_at.desc()).limit(limit).offset(offset))
+    return {"items": result.scalars().all(), "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("", response_model=ChangeRequestOut)
@@ -239,7 +246,7 @@ async def create_request(
     db.add(req)
     await db.flush()
     for item in body.items:
-        db.add(ChangeRequestItem(request_id=req.id, **item))
+        db.add(ChangeRequestItem(request_id=req.id, **item.model_dump()))
     db.add(RequestHistory(request_id=req.id, from_status=None, to_status=req.status.value, actor_id=user.id))
     await db.commit()
     await db.refresh(req)
@@ -272,6 +279,34 @@ async def get_request(
     req = await db.get(ChangeRequest, id)
     if not req:
         raise HTTPException(404)
+    return req
+
+
+@router.patch("/{id}", response_model=ChangeRequestOut)
+async def update_request(
+    id: int,
+    body: ChangeRequestUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.r2, UserRole.r3)),
+):
+    req = await db.get(ChangeRequest, id)
+    if not req or req.author_id != user.id:
+        raise HTTPException(404)
+    if req.status not in (RequestStatus.draft, RequestStatus.revision):
+        raise HTTPException(400, "Заявку можно редактировать только в черновике или на доработке")
+    data = body.model_dump(exclude_unset=True)
+    if "title" in data:
+        req.title = data["title"]
+    if "note" in data:
+        req.note = data["note"]
+    if "items" in data and data["items"] is not None:
+        _assert_items_allowed(user.role, data["items"])
+        await db.execute(delete(ChangeRequestItem).where(ChangeRequestItem.request_id == id))
+        for item in data["items"]:
+            db.add(ChangeRequestItem(request_id=id, **item.model_dump()))
+    await db.commit()
+    await db.refresh(req)
+    await log_action(db, user.id, "update_request", "change_request", id)
     return req
 
 
@@ -366,14 +401,28 @@ async def reject_request(
     if user.role == UserRole.r2 and req.status == RequestStatus.pending_cfd:
         req.status = RequestStatus.revision
     elif user.role == UserRole.r1 and req.status == RequestStatus.pending_ceo:
-        req.status = RequestStatus.pending_cfd if body.send_to == "r2" else RequestStatus.revision
+        if body.final:
+            req.status = RequestStatus.rejected
+        elif body.send_to == "r2":
+            req.status = RequestStatus.pending_cfd
+        elif body.send_to == "r3":
+            author = await db.get(User, req.author_id)
+            if not author or author.role != UserRole.r3:
+                raise HTTPException(400, "Вернуть меддиректору можно только заявку автора R3")
+            req.status = RequestStatus.revision
+        else:
+            req.status = RequestStatus.revision
     else:
         raise HTTPException(400, "Invalid transition")
     db.add(RequestHistory(request_id=id, from_status=old, to_status=req.status.value, actor_id=user.id, note=body.note))
     await db.commit()
     await db.refresh(req)
-    bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} возвращена на доработку",
-                f"Заявка «{req.title}» возвращена на доработку. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
+    if req.status == RequestStatus.rejected:
+        bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} отклонена",
+                    f"Заявка «{req.title}» отклонена. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
+    else:
+        bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} возвращена на доработку",
+                    f"Заявка «{req.title}» возвращена на доработку. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
     return req
 
 

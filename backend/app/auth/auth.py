@@ -1,8 +1,9 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-import hashlib
 
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -20,28 +21,26 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(user_id: int, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
-    return jwt.encode(
-        {"sub": str(user_id), "role": role, "exp": expire},
-        settings.secret_key,
-        algorithm=ALGORITHM,
-    )
+def create_access_token(user_id: int, role: str, token_version: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    payload = {
+        "sub": str(user_id),
+        "role": role,
+        "ver": token_version,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
-def create_refresh_token(user_id: int) -> str:
-    expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
-    import secrets
-    token = secrets.token_urlsafe(48)
-    return token, expire
+def create_refresh_token(user_id: int) -> tuple[str, datetime]:
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+    return secrets.token_urlsafe(48), expire
 
 
 def decode_access_token(token: str) -> Optional[dict]:
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 

@@ -1,7 +1,7 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from app.core.db import get_db
 from app.models.models import (
@@ -10,18 +10,22 @@ from app.models.models import (
 )
 from app.schemas.schemas import (
     PackageOut, PackageCreate, PackageUpdate, PackagePriceOut, PackagePriceCreate,
-    PackageItemOut, PackageItemCreate, EntityHistoryOut,
+    PackageItemOut, PackageItemCreate, EntityHistoryOut, PageOut,
 )
 from app.api.deps import get_current_user, require_roles, log_action
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 
-# Ф32: прямые создание/правка пакетов — только R1; R3 — через заявку
 _r1 = require_roles(UserRole.r1)
+_CHISINAU_CODE = "CLN-001"
+
+
+async def _chisinau_id(db: AsyncSession) -> int | None:
+    res = await db.execute(select(Clinic.id).where(Clinic.code == _CHISINAU_CODE))
+    return res.scalar_one_or_none()
 
 
 async def _calc_package_price(db: AsyncSession, package_id: int, clinic_id: int) -> Optional[float]:
-    """Σ service_prices for all required items in this clinic."""
     items_res = await db.execute(
         select(PackageItem).where(PackageItem.package_id == package_id)
     )
@@ -42,10 +46,47 @@ async def _calc_package_price(db: AsyncSession, package_id: int, clinic_id: int)
     return total
 
 
-@router.get("", response_model=list[PackageOut])
-async def list_packages(db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    res = await db.execute(select(Package).order_by(Package.code))
-    return res.scalars().all()
+async def _package_list_prices(db: AsyncSession, clinic_id: int, pkg_ids: list[int]) -> dict[int, float]:
+    out: dict[int, float] = {}
+    for pid in pkg_ids:
+        pp = (await db.execute(select(PackagePrice).where(
+            PackagePrice.package_id == pid, PackagePrice.clinic_id == clinic_id,
+        ))).scalar_one_or_none()
+        if pp and pp.price_fixed is not None:
+            out[pid] = float(pp.price_fixed)
+        else:
+            calc = await _calc_package_price(db, pid, clinic_id)
+            if calc is not None:
+                out[pid] = calc
+    return out
+
+
+@router.get("", response_model=PageOut[PackageOut])
+async def list_packages(
+    search: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    q = select(Package)
+    if search:
+        pat = f"%{search}%"
+        q = q.where(or_(
+            Package.name_ru.collate("und-x-icu").ilike(pat),
+            Package.code.collate("und-x-icu").ilike(pat),
+        ))
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    res = await db.execute(q.order_by(Package.code).limit(limit).offset(offset))
+    pkgs = res.scalars().all()
+    cid = await _chisinau_id(db)
+    prices = await _package_list_prices(db, cid, [p.id for p in pkgs]) if cid else {}
+    items = []
+    for p in pkgs:
+        row = PackageOut.model_validate(p)
+        row.price = prices.get(p.id)
+        items.append(row)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("", response_model=PackageOut)
@@ -73,7 +114,12 @@ async def get_package(id: int, db: AsyncSession = Depends(get_db), _=Depends(get
     obj = res.scalar_one_or_none()
     if not obj:
         raise HTTPException(404)
-    return obj
+    out = PackageOut.model_validate(obj)
+    cid = await _chisinau_id(db)
+    if cid:
+        prices = await _package_list_prices(db, cid, [obj.id])
+        out.price = prices.get(obj.id)
+    return out
 
 
 @router.patch("/{id}", response_model=PackageOut)
@@ -141,7 +187,6 @@ async def package_history(
 async def computed_price(
     id: int, clinic_id: int, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)
 ):
-    # Check fixed price first
     pp_res = await db.execute(
         select(PackagePrice).where(
             PackagePrice.package_id == id, PackagePrice.clinic_id == clinic_id
@@ -159,7 +204,7 @@ async def set_package_price(
     id: int,
     body: PackagePriceCreate,
     db: AsyncSession = Depends(get_db),
-    _=Depends(_r1),  # прямая правка — R1; R2/R3 через заявку
+    _=Depends(_r1),
 ):
     clinic = await db.get(Clinic, body.clinic_id)
     if not clinic:

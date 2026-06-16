@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api, Clinic, Package, Service } from "../api/client";
+import { api, Clinic, Package, Page, Service } from "../api/client";
 
 const SERVICE_FIELDS = [
   { key: "name_ru", label: "Название (RU)" },
@@ -25,13 +25,19 @@ export default function NewRequest() {
   const [items, setItems] = useState<Item[]>([]);
   const [kind, setKind] = useState<"service" | "service_price" | "package">("service");
 
-  const { data: services } = useQuery({ queryKey: ["services-all"], queryFn: async () => (await api.get<Service[]>("/api/services")).data });
-  const { data: packages } = useQuery({ queryKey: ["packages"], queryFn: async () => (await api.get<Package[]>("/api/packages")).data });
+  const { data: services } = useQuery({
+    queryKey: ["services-all"],
+    queryFn: async () => (await api.get<Page<Service>>("/api/services?limit=500")).data.items,
+  });
+  const { data: packages } = useQuery({
+    queryKey: ["packages-all"],
+    queryFn: async () => (await api.get<Page<Package>>("/api/packages?limit=500")).data.items,
+  });
   const { data: clinics } = useQuery({ queryKey: ["clinics"], queryFn: async () => (await api.get<Clinic[]>("/api/clinics")).data });
 
   const create = useMutation({
     mutationFn: async () => (await api.post("/api/requests", {
-      title, note,
+      title, note: note || null,
       items: items.map(({ label, ...rest }) => rest),
     })).data,
     onSuccess: (r: any) => nav(`/requests/${r.id}`),
@@ -43,12 +49,12 @@ export default function NewRequest() {
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: "span 2" }}>
           <h3>Параметры заявки</h3>
-          <div className="field"><label>Заголовок</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-          <div className="field"><label>Описание</label><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></div>
+          <div className="field"><label htmlFor="new-req-title">Заголовок</label><input id="new-req-title" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+          <div className="field"><label htmlFor="new-req-note">Комментарий</label><textarea id="new-req-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Пояснение к заявке (необязательно)" /></div>
 
           <h3 style={{ marginTop: 18 }}>Добавить изменение</h3>
-          <div className="field"><label>Тип изменения</label>
-            <select value={kind} onChange={(e) => setKind(e.target.value as any)}>
+          <div className="field"><label htmlFor="new-req-kind">Тип изменения</label>
+            <select id="new-req-kind" value={kind} onChange={(e) => setKind(e.target.value as any)}>
               <option value="service">Параметр услуги</option>
               <option value="service_price">Цена услуги (по клинике)</option>
               <option value="package">Параметр пакета</option>
@@ -93,20 +99,20 @@ function ServiceItemForm({ services, onAdd }: { services: Service[]; onAdd: (it:
   return (
     <>
       <div className="row">
-        <div><label>Услуга</label>
-          <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
+        <div className="field"><label htmlFor="svc-pick">Услуга</label>
+          <select id="svc-pick" value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
             <option value="">— выберите —</option>
             {services.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name_ru}</option>)}
           </select>
         </div>
-        <div><label>Поле</label>
-          <select value={field} onChange={(e) => setField(e.target.value)}>
+        <div className="field"><label htmlFor="svc-field">Поле</label>
+          <select id="svc-field" value={field} onChange={(e) => setField(e.target.value)}>
             {SERVICE_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
         </div>
       </div>
       <div className="row" style={{ marginTop: 8, alignItems: "flex-end" }}>
-        <div><label>Новое значение</label><input value={value} onChange={(e) => setValue(e.target.value)} /></div>
+        <div className="field"><label htmlFor="svc-val">Новое значение</label><input id="svc-val" value={value} onChange={(e) => setValue(e.target.value)} /></div>
         <button className="ghost" style={{ flex: "0 0 auto" }} disabled={!serviceId || !value} onClick={add}>Добавить в заявку</button>
       </div>
     </>
@@ -136,22 +142,22 @@ function PriceItemForm({ services, clinics, onAdd }: { services: Service[]; clin
   return (
     <>
       <div className="row">
-        <div><label>Услуга</label>
-          <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
+        <div className="field"><label htmlFor="price-svc">Услуга</label>
+          <select id="price-svc" value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
             <option value="">— выберите —</option>
             {services.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name_ru}</option>)}
           </select>
         </div>
-        <div><label>Клиника</label>
-          <select value={clinicId} onChange={(e) => setClinicId(e.target.value)}>
+        <div className="field"><label htmlFor="price-clinic">Клиника</label>
+          <select id="price-clinic" value={clinicId} onChange={(e) => setClinicId(e.target.value)}>
             <option value="">— выберите —</option>
             {clinics.map((c) => <option key={c.id} value={c.id}>{c.name_ru}</option>)}
           </select>
         </div>
       </div>
       <div className="row" style={{ marginTop: 8, alignItems: "flex-end" }}>
-        <div><label>Цена (MDL)</label><input type="number" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
-        <div><label>Цена Online (опц.)</label><input type="number" value={priceOnline} onChange={(e) => setPriceOnline(e.target.value)} /></div>
+        <div className="field"><label htmlFor="price-val">Цена (MDL)</label><input id="price-val" type="number" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
+        <div className="field"><label htmlFor="price-online">Цена Online (опц.)</label><input id="price-online" type="number" value={priceOnline} onChange={(e) => setPriceOnline(e.target.value)} /></div>
         <button className="ghost" style={{ flex: "0 0 auto" }} disabled={!serviceId || !clinicId || !price} onClick={add}>Добавить в заявку</button>
       </div>
     </>
@@ -177,20 +183,20 @@ function PackageItemForm({ packages, onAdd }: { packages: Package[]; onAdd: (it:
   return (
     <>
       <div className="row">
-        <div><label>Пакет</label>
-          <select value={packageId} onChange={(e) => setPackageId(e.target.value)}>
+        <div className="field"><label htmlFor="pkg-pick">Пакет</label>
+          <select id="pkg-pick" value={packageId} onChange={(e) => setPackageId(e.target.value)}>
             <option value="">— выберите —</option>
             {packages.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name_ru}</option>)}
           </select>
         </div>
-        <div><label>Поле</label>
-          <select value={field} onChange={(e) => setField(e.target.value)}>
+        <div className="field"><label htmlFor="pkg-field">Поле</label>
+          <select id="pkg-field" value={field} onChange={(e) => setField(e.target.value)}>
             {PACKAGE_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
         </div>
       </div>
       <div className="row" style={{ marginTop: 8, alignItems: "flex-end" }}>
-        <div><label>Новое значение</label><input value={value} onChange={(e) => setValue(e.target.value)} /></div>
+        <div className="field"><label htmlFor="pkg-val">Новое значение</label><input id="pkg-val" value={value} onChange={(e) => setValue(e.target.value)} /></div>
         <button className="ghost" style={{ flex: "0 0 auto" }} disabled={!packageId || !value} onClick={add}>Добавить в заявку</button>
       </div>
     </>

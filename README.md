@@ -3,8 +3,8 @@
 Единая система учёта нормативно-справочной информации (НСИ) для сети офтальмологических клиник (Кишинёв, Тирасполь, Рыбница). Базовая валюта — MDL.
 
 ## Стек
-- Backend: Python 3.12 · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL 16
-- Frontend: React 18 · Vite · TypeScript · TanStack Query
+- Backend: Python 3.12 · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL 16 · Gunicorn (prod)
+- Frontend: React 18 · Vite · TypeScript · TanStack Query · nginx (prod)
 - Mailer: отдельный контейнер (SMTP/TLS)
 - Оркестрация: docker-compose (`restart: always`, health checks)
 
@@ -12,23 +12,41 @@
 | Сервис | Образ/сборка | Порт | Назначение |
 |--------|--------------|------|------------|
 | `db` | postgres:16-alpine | — | БД (том `pg_data`) |
-| `backend` | `./backend` (FastAPI) | 8000 | API, авто-сид при старте |
-| `frontend` | `./frontend` (Vite) | 5173 | SPA |
+| `backend` | `./backend` (FastAPI) | 8000 | API, Alembic + seed при старте |
+| `frontend` | `./frontend` (Vite dev / nginx prod) | 5173 | SPA |
 | `mailer` | `./mailer` (FastAPI) | 8001 | отправка email (SMTP/TLS) |
 
-## Локальный запуск
+## Локальный запуск (dev)
 ```bash
 cp .env.example .env   # заполнить значения (.env уже в .gitignore)
 docker compose up --build
 ```
+Автоматически подхватывается `docker-compose.override.yml` (hot-reload backend + Vite dev-server).
+
 - Frontend: http://localhost:5173
 - API / Swagger: http://localhost:8000/api/health · http://localhost:8000/docs
 
 > **Секреты.** `ADMIN_PASSWORD` и `SEED_PASSWORD` — обязательные переменные в `.env`
 > (без них backend не стартует). Реальные пароли/логины в репозиторий не коммитятся.
 
-При старте backend автоматически создаёт таблицы и наполняет БД (`scripts/seed.py`):
+При первом старте backend выполняет `alembic upgrade head` и наполняет БД (`scripts/seed.py`):
 справочники, ~509 услуг из `source.xlsx`, пакеты, цены по Кишинёву и 4 пользователя.
+
+### Существующая БД (миграция с create_all)
+Если таблицы уже созданы вручную или старым seed:
+```bash
+docker compose exec backend alembic stamp head
+docker compose exec backend alembic upgrade head   # только новые миграции
+```
+
+## Прод-деплой
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+Добавляет nginx+SSL (`./cert`), Grafana под `/bi`, Loki + Fluent Bit, ежедневные бэкапы БД (хранение 30 дней).
+Backend — Gunicorn с `--forwarded-allow-ips`; frontend — multi-stage build → nginx.
+
+Для локальной разработки без HTTPS в `.env`: `COOKIE_SECURE=false`.
 
 ## Тестирование
 Регрессионный набор и инструкции — в [`TEST_PLAN.md`](TEST_PLAN.md):
@@ -51,12 +69,6 @@ cd tests/e2e && npm install && npx playwright test   # E2E (UI)
 | R2 Финансовый директор | `cfo@mikofai.ru` | `SEED_PASSWORD` |
 | R3 Медицинский директор | `med@mikofai.ru` | `SEED_PASSWORD` |
 | R4 Персонал | `staff@mikofai.ru` | `SEED_PASSWORD` |
-
-## Деплой (после подтверждения)
-```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-```
-Добавляет nginx+SSL (`./cert`), Grafana под `/bi`, Loki + Fluent Bit, ежедневные бэкапы БД (хранение 30 дней).
 
 ## Соответствие ТЗ
 - Локально не реализуются (до деплоя): HTTPS/SSL, Grafana+Fluent Bit, email-алерты health check — см. `docker-compose.prod.yml`.

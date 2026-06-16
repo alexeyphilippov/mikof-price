@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ChangeRequest, Ref, ROLE_NAMES, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { useRefs } from "../lib/useRefs";
+import { fmtDate } from "../lib/dates";
 import EntityCard from "../components/EntityCard";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -25,11 +26,24 @@ export default function RequestDetail() {
   const qc = useQueryClient();
   const [comment, setComment] = useState("");
   const [note, setNote] = useState("");
-  // Ф6: правки цен R2 при согласовании — item.id → исправленная цена
   const [overrides, setOverrides] = useState<Record<number, string>>({});
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editNote, setEditNote] = useState("");
 
-  const { data: r } = useQuery({ queryKey: ["request", id], queryFn: async () => (await api.get<ChangeRequest>(`/api/requests/${id}`)).data });
+  const { data: r } = useQuery({
+    queryKey: ["request", id],
+    queryFn: async () => (await api.get<ChangeRequest>(`/api/requests/${id}`)).data,
+    refetchInterval: 4000,
+  });
   const { groups, subgroups, executors, locations, clinics } = useRefs();
+
+  useEffect(() => {
+    if (r && editing) {
+      setEditTitle(r.title);
+      setEditNote(r.note ?? "");
+    }
+  }, [r, editing]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["request", id] });
@@ -40,6 +54,10 @@ export default function RequestDetail() {
   const act = useMutation({
     mutationFn: async (action: { url: string; body?: any }) => api.patch(`/api/requests/${id}/${action.url}`, action.body ?? {}),
     onSuccess: invalidate,
+  });
+  const saveEdit = useMutation({
+    mutationFn: async () => api.patch(`/api/requests/${id}`, { title: editTitle, note: editNote }),
+    onSuccess: () => { setEditing(false); invalidate(); },
   });
   const actErr = act.isError ? ((act.error as any)?.response?.data?.detail ?? "Не удалось выполнить действие") : "";
   const addComment = useMutation({
@@ -86,38 +104,53 @@ export default function RequestDetail() {
     return clinics?.find((c) => c.id === raw.clinic_id)?.name_ru ?? `#${raw.clinic_id}`;
   };
   const isPriceItem = (et: string) => et === "service_price" || et === "package_price";
-
-  const entityLabel = (it: ChangeRequest["items"][number]) =>
-    ENTITY_LABELS[it.entity_type] ?? it.entity_type;
+  const entityLabel = (it: ChangeRequest["items"][number]) => ENTITY_LABELS[it.entity_type] ?? it.entity_type;
 
   const isR2 = me!.role === "r2";
   const isR1 = me!.role === "r1";
   const isAuthor = r.author_id === me!.id;
+  const canEdit = isAuthor && (r.status === "draft" || r.status === "revision");
   const cancellable = ["draft", "revision", "pending_cfd", "pending_ceo"].includes(r.status);
+  const authorIsR3 = r.author_role === "r3";
 
-  // Уникальные затрагиваемые сущности (зам.1)
   const affected = Array.from(
-    new Map(
-      r.items.filter((it) => it.entity_id).map((it) => [`${it.entity_type}:${it.entity_id}`, it])
-    ).values()
+    new Map(r.items.filter((it) => it.entity_id).map((it) => [`${it.entity_type}:${it.entity_id}`, it])).values()
   );
 
   return (
     <>
       <div className="topbar">
-        <h1>Заявка №{r.id}: {r.title}</h1>
+        <h1>Заявка №{r.id}: {editing ? editTitle : r.title}</h1>
         <span className={`pill ${r.status}`}>{STATUS_NAMES[r.status]}</span>
       </div>
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: "span 2" }}>
-          <h3>Изменения</h3>
-          <p className="muted" style={{ marginTop: -6 }}>
-            Автор: <b>{r.author_name ?? `#${r.author_id}`}</b>
-            {r.participants && r.participants.length > 0 && (
-              <> · Участники: {r.participants.map((p) => `${p.name} (${ROLE_NAMES[p.role]})`).join(", ")}</>
-            )}
-          </p>
-          {r.note && <p className="muted">{r.note}</p>}
+          {editing ? (
+            <>
+              <h3>Редактирование заявки</h3>
+              <div className="field"><label htmlFor="req-title">Заголовок</label>
+                <input id="req-title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+              </div>
+              <div className="field"><label htmlFor="req-note">Комментарий</label>
+                <textarea id="req-note" value={editNote} onChange={(e) => setEditNote(e.target.value)} rows={3} />
+              </div>
+              <div className="row">
+                <button disabled={!editTitle || saveEdit.isPending} onClick={() => saveEdit.mutate()}>Сохранить</button>
+                <button className="ghost" onClick={() => setEditing(false)}>Отмена</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3>Изменения</h3>
+              <p className="muted" style={{ marginTop: -6 }}>
+                Автор: <b>{r.author_name ?? `#${r.author_id}`}</b>
+                {r.participants && r.participants.length > 0 && (
+                  <> · Участники: {r.participants.map((p) => `${p.name} (${ROLE_NAMES[p.role]})`).join(", ")}</>
+                )}
+              </p>
+              {r.note && <p className="muted">{r.note}</p>}
+            </>
+          )}
           <table>
             <thead><tr><th>Сущность</th><th>Клиника</th><th>Поле</th><th>Было</th><th>Станет</th></tr></thead>
             <tbody>
@@ -133,19 +166,10 @@ export default function RequestDetail() {
                       {canOverride ? (
                         <div className="row" style={{ alignItems: "center", gap: 6 }}>
                           <span className="muted" style={{ flex: "0 0 auto" }}>{it.new_value?.price} →</span>
-                          <input
-                            type="number"
-                            style={{ maxWidth: 120 }}
-                            placeholder={String(it.new_value?.price ?? "")}
-                            value={overrides[it.id] ?? ""}
-                            onChange={(e) => setOverrides({ ...overrides, [it.id]: e.target.value })}
-                          />
+                          <input type="number" style={{ maxWidth: 120 }} placeholder={String(it.new_value?.price ?? "")}
+                            value={overrides[it.id] ?? ""} onChange={(e) => setOverrides({ ...overrides, [it.id]: e.target.value })} />
                         </div>
-                      ) : isPriceItem(it.entity_type) ? (
-                        fmtPriceItem(it)
-                      ) : (
-                        fmtVal(it.field_name, it.r2_override_value ?? it.new_value)
-                      )}
+                      ) : isPriceItem(it.entity_type) ? fmtPriceItem(it) : fmtVal(it.field_name, it.r2_override_value ?? it.new_value)}
                     </td>
                   </tr>
                 );
@@ -168,7 +192,6 @@ export default function RequestDetail() {
             {(isR2 && r.status === "pending_cfd") && (
               <div className="row">
                 <button onClick={() => {
-                  // Ф6: собрать r2_overrides из исправленных цен
                   const r2_overrides: Record<number, any> = {};
                   for (const it of r.items) {
                     const v = overrides[it.id];
@@ -185,11 +208,19 @@ export default function RequestDetail() {
               <div className="row">
                 <button onClick={() => act.mutate({ url: "approve", body: { note } })}>Утвердить (применить)</button>
                 <button className="ghost" onClick={() => act.mutate({ url: "reject", body: { note, send_to: "r2" } })}>Вернуть финдиректору</button>
-                <button className="danger" onClick={() => act.mutate({ url: "reject", body: { note, send_to: "r3" } })}>Вернуть меддиректору</button>
+                {authorIsR3 && (
+                  <button className="danger" onClick={() => act.mutate({ url: "reject", body: { note, send_to: "r3" } })}>Вернуть меддиректору</button>
+                )}
+                <button className="danger" onClick={() => {
+                  if (window.confirm("Окончательно отклонить заявку?")) act.mutate({ url: "reject", body: { note, final: true } });
+                }}>Отклонить</button>
               </div>
             )}
-            {(isAuthor && (r.status === "draft" || r.status === "revision")) && (
-              <button onClick={() => act.mutate({ url: "submit" })}>Отправить на согласование</button>
+            {canEdit && !editing && (
+              <>
+                <button onClick={() => setEditing(true)}>Редактировать</button>
+                <button style={{ marginLeft: 8 }} onClick={() => act.mutate({ url: "submit" })}>Отправить на согласование</button>
+              </>
             )}
             {isAuthor && cancellable && (
               <button className="danger" style={{ marginLeft: 8 }} onClick={() => {
@@ -198,8 +229,8 @@ export default function RequestDetail() {
             )}
             {(isR1 || isR2) && (r.status === "pending_cfd" || r.status === "pending_ceo") && (
               <div className="field" style={{ marginTop: 12 }}>
-                <label>Комментарий к решению (необязательно)</label>
-                <input value={note} onChange={(e) => setNote(e.target.value)} />
+                <label htmlFor="decision-note">Комментарий к решению (необязательно)</label>
+                <input id="decision-note" value={note} onChange={(e) => setNote(e.target.value)} />
               </div>
             )}
           </div>
@@ -211,7 +242,7 @@ export default function RequestDetail() {
             {r.history.map((h) => (
               <li key={h.id}>
                 {h.from_status ? `${STATUS_NAMES[h.from_status]} → ` : ""}{STATUS_NAMES[h.to_status]}
-                <div className="muted">{h.actor_name ?? `#${h.actor_id}`} · {new Date(h.created_at).toLocaleString("ru")}</div>
+                <div className="muted">{h.actor_name ?? `#${h.actor_id}`} · {fmtDate(h.created_at)}</div>
               </li>
             ))}
           </ul>
@@ -222,12 +253,12 @@ export default function RequestDetail() {
         <h3>Комментарии</h3>
         {r.comments.map((c) => (
           <div className="comment" key={c.id}>
-            <div className="meta">{c.author_name ?? `#${c.author_id}`} · {new Date(c.created_at).toLocaleString("ru")}</div>
+            <div className="meta">{c.author_name ?? `#${c.author_id}`} · {fmtDate(c.created_at)}</div>
             {c.text}
           </div>
         ))}
         <div className="row" style={{ marginTop: 12 }}>
-          <input placeholder="Написать комментарий…" value={comment} onChange={(e) => setComment(e.target.value)} />
+          <input placeholder="Написать комментарий…" value={comment} onChange={(e) => setComment(e.target.value)} aria-label="Текст комментария" />
           <button style={{ flex: "0 0 auto" }} disabled={!comment} onClick={() => addComment.mutate()}>Отправить</button>
         </div>
       </div>

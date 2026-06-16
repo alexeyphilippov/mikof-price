@@ -1,21 +1,24 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api, ChangeRequest, STATUS_NAMES } from "../api/client";
+import { api, ChangeRequest, Page, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
+import { fmtDate } from "../lib/dates";
 import SortableTable, { Column } from "../components/SortableTable";
 
-const METRICS = ["pending_cfd", "pending_ceo", "revision", "approved", "cancelled"];
+const METRICS = ["pending_cfd", "pending_ceo", "revision", "approved", "rejected", "cancelled"];
 
 export default function Requests() {
   const { me } = useAuth();
-  const { data } = useQuery({ queryKey: ["requests"], queryFn: async () => (await api.get<ChangeRequest[]>("/api/requests")).data });
+  const { data } = useQuery({
+    queryKey: ["requests"],
+    queryFn: async () => (await api.get<Page<ChangeRequest>>("/api/requests?limit=500")).data.items,
+  });
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const rows = data ?? [];
   const by = (s: string) => rows.filter((r) => r.status === s).length;
 
-  // Заявки, ожидающие действия текущей роли (зам.7)
   const mine = rows.filter((r) =>
     (me!.role === "r1" && r.status === "pending_ceo") ||
     (me!.role === "r2" && r.status === "pending_cfd") ||
@@ -28,7 +31,7 @@ export default function Requests() {
     { key: "author", label: "Автор", value: (r) => r.author_name ?? `#${r.author_id}` },
     { key: "count", label: "Изменений", value: (r) => r.items.length },
     { key: "status", label: "Статус", value: (r) => STATUS_NAMES[r.status] ?? r.status, render: (r) => <span className={`pill ${r.status}`}>{STATUS_NAMES[r.status]}</span> },
-    { key: "updated", label: "Обновлена", value: (r) => Date.parse(r.updated_at), render: (r) => <span className="muted">{new Date(r.updated_at).toLocaleString("ru")}</span> },
+    { key: "updated", label: "Обновлена", value: (r) => Date.parse(r.updated_at), render: (r) => <span className="muted">{fmtDate(r.updated_at)}</span> },
   ];
 
   const tableRows = statusFilter ? rows.filter((r) => r.status === statusFilter) : rows;
@@ -71,7 +74,7 @@ export default function Requests() {
                     <td><Link to={`/requests/${r.id}`}>{r.title}</Link></td>
                     <td className="muted">{r.author_name ?? `#${r.author_id}`}</td>
                     <td><span className={`pill ${r.status}`}>{STATUS_NAMES[r.status]}</span></td>
-                    <td className="muted">{new Date(r.updated_at).toLocaleString("ru")}</td>
+                    <td className="muted">{fmtDate(r.updated_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -90,13 +93,7 @@ export default function Requests() {
             </span>
           )}
         </h3>
-        <SortableTable
-          columns={columns}
-          rows={tableRows}
-          rowKey={(r) => r.id}
-          initialSort={{ key: "updated", dir: "desc" }}
-          emptyText="Заявок нет"
-        />
+        <SortableTable columns={columns} rows={tableRows} rowKey={(r) => r.id} initialSort={{ key: "updated", dir: "desc" }} emptyText="Заявок нет" />
       </div>
     </>
   );
