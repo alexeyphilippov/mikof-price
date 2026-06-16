@@ -1,7 +1,7 @@
 import enum
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles, log_action
@@ -27,11 +27,13 @@ from app.models.models import (
     User,
     UserRole,
 )
+from app.core.config import settings
 from app.services.notify import send_mail
 from app.services.request_email import render_approval_email
 from app.schemas.schemas import (
     ChangeRequestCreate,
     ChangeRequestOut,
+    ChangeRequestUpdate,
     CommentCreate,
     PendingCount,
     RequestApproveInput,
@@ -43,8 +45,12 @@ router = APIRouter(prefix="/api/requests", tags=["requests"])
 R2_FINANCIAL = frozenset({"service_price", "package_price", "package_item_add", "package_item_remove"})
 R3_MEDICAL_TYPES = frozenset({
     "service", "package", "service_create", "package_create",
-    "group", "subgroup", "executor", "location", "clinic",
-    "group_create", "subgroup_create", "executor_create", "location_create", "clinic_create",
+    "group", "subgroup", "executor", "location",
+    "group_create", "subgroup_create", "executor_create", "location_create",
+})
+_CANCELABLE = frozenset({
+    RequestStatus.draft, RequestStatus.revision,
+    RequestStatus.pending_cfd, RequestStatus.pending_ceo,
 })
 R3_SERVICE_FIELDS = frozenset({
     "name_ru", "name_ro", "duration_min", "note", "group_id", "subgroup_id", "executor_id", "location_id", "status",
@@ -91,6 +97,15 @@ async def _participants(db: AsyncSession, req_id: int) -> list[str]:
         r = await db.execute(select(User.email).join(model, col == User.id).where(model.request_id == req_id))
         emails.update(r.scalars().all())
     return list(emails)
+
+
+async def _author_email(db: AsyncSession, req: ChangeRequest) -> str | None:
+    u = await db.get(User, req.author_id)
+    return u.email if u else None
+
+
+def _req_url(req_id: int) -> str:
+    return f"{settings.app_base_url.rstrip('/')}/requests/{req_id}"
 
 
 def _coerce_value(obj, field: str, raw):
@@ -261,6 +276,34 @@ async def get_request(
     return req
 
 
+@router.patch("/{id}", response_model=ChangeRequestOut)
+async def update_request(
+    id: int,
+    body: ChangeRequestUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.r2, UserRole.r3)),
+):
+    req = await db.get(ChangeRequest, id)
+    if not req or req.author_id != user.id:
+        raise HTTPException(404)
+    if req.status not in (RequestStatus.draft, RequestStatus.revision):
+        raise HTTPException(400, "Заявку можно редактировать только в черновике или на доработке")
+    data = body.model_dump(exclude_unset=True)
+    if "title" in data:
+        req.title = data["title"]
+    if "note" in data:
+        req.note = data["note"]
+    if "items" in data and data["items"] is not None:
+        _assert_items_allowed(user.role, data["items"])
+        await db.execute(delete(ChangeRequestItem).where(ChangeRequestItem.request_id == id))
+        for item in data["items"]:
+            db.add(ChangeRequestItem(request_id=id, **item))
+    await db.commit()
+    await db.refresh(req)
+    await log_action(db, user.id, "update_request", "change_request", id)
+    return req
+
+
 @router.patch("/{id}/submit", response_model=ChangeRequestOut)
 async def submit_request(
     id: int,
@@ -271,6 +314,8 @@ async def submit_request(
     req = await db.get(ChangeRequest, id)
     if not req or req.author_id != user.id:
         raise HTTPException(404)
+    if req.status == RequestStatus.cancelled:
+        raise HTTPException(400, "Заявка отменена")
     if req.status not in (RequestStatus.draft, RequestStatus.revision):
         raise HTTPException(400, "Request cannot be submitted")
     old = req.status.value
@@ -283,6 +328,9 @@ async def submit_request(
     # Ф5: уведомить следующего согласующего — интерактивное HTML-письмо
     subject, text, html = await render_approval_email(db, req)
     bg.add_task(send_mail, await _emails_by_role(db, notify_role), subject, text, html)
+    if author := await _author_email(db, req):
+        bg.add_task(send_mail, [author], f"Заявка №{req.id} отправлена на согласование",
+                    f"Ваша заявка «{req.title}» отправлена на согласование.\n\nОткрыть: {_req_url(id)}")
     return req
 
 
@@ -297,6 +345,8 @@ async def approve_request(
     req = await db.get(ChangeRequest, id)
     if not req:
         raise HTTPException(404)
+    if req.status == RequestStatus.cancelled:
+        raise HTTPException(400, "Заявка отменена")
     old = req.status.value
     if user.role == UserRole.r2 and req.status == RequestStatus.pending_cfd:
         for item in req.items:
@@ -318,9 +368,13 @@ async def approve_request(
         # R2 согласовал → заявка ушла гендиректору: интерактивное HTML-письмо
         subject, text, html = await render_approval_email(db, req)
         bg.add_task(send_mail, recipients, subject, text, html)
+        if author := await _author_email(db, req):
+            bg.add_task(send_mail, [author], f"Заявка №{req.id}: согласована финдиректором",
+                        f"Заявка «{req.title}» передана на утверждение гендиректору.\n\nОткрыть: {_req_url(id)}")
     else:
-        bg.add_task(send_mail, recipients, f"Заявка №{req.id}: статус {req.status.value}",
-                    f"Заявка «{req.title}» переведена в статус {req.status.value}.")
+        url = _req_url(id)
+        bg.add_task(send_mail, recipients, f"Заявка №{req.id}: утверждена",
+                    f"Заявка «{req.title}» утверждена.\n\nОткрыть: {url}")
     return req
 
 
@@ -335,6 +389,8 @@ async def reject_request(
     req = await db.get(ChangeRequest, id)
     if not req:
         raise HTTPException(404)
+    if req.status == RequestStatus.cancelled:
+        raise HTTPException(400, "Заявка отменена")
     old = req.status.value
     if user.role == UserRole.r2 and req.status == RequestStatus.pending_cfd:
         req.status = RequestStatus.revision
@@ -346,7 +402,31 @@ async def reject_request(
     await db.commit()
     await db.refresh(req)
     bg.add_task(send_mail, await _participants(db, id), f"Заявка №{req.id} возвращена на доработку",
-                f"Заявка «{req.title}» возвращена ({req.status.value}). {body.note or ''}")
+                f"Заявка «{req.title}» возвращена на доработку. {body.note or ''}\n\nОткрыть: {_req_url(id)}")
+    return req
+
+
+@router.patch("/{id}/cancel", response_model=ChangeRequestOut)
+async def cancel_request(
+    id: int,
+    bg: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.r2, UserRole.r3)),
+):
+    req = await db.get(ChangeRequest, id)
+    if not req or req.author_id != user.id:
+        raise HTTPException(404)
+    if req.status not in _CANCELABLE:
+        raise HTTPException(400, "Заявку нельзя отменить")
+    old = req.status.value
+    req.status = RequestStatus.cancelled
+    db.add(RequestHistory(request_id=id, from_status=old, to_status=req.status.value, actor_id=user.id))
+    await db.commit()
+    await db.refresh(req)
+    await log_action(db, user.id, "cancel_request", "change_request", id)
+    recipients = [e for e in await _participants(db, id) if e != user.email]
+    bg.add_task(send_mail, recipients, f"Заявка №{req.id} отменена автором",
+                f"Заявка «{req.title}» отменена автором.\n\nОткрыть: {_req_url(id)}")
     return req
 
 
