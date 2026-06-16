@@ -22,6 +22,7 @@ export default function NewRequest() {
   const nav = useNavigate();
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
+  const [comment, setComment] = useState("");
   const [items, setItems] = useState<Item[]>([]);
   const [kind, setKind] = useState<"service" | "service_price" | "package">("service");
 
@@ -30,10 +31,15 @@ export default function NewRequest() {
   const { data: clinics } = useQuery({ queryKey: ["clinics"], queryFn: async () => (await api.get<Clinic[]>("/api/clinics")).data });
 
   const create = useMutation({
-    mutationFn: async () => (await api.post("/api/requests", {
-      title, note,
-      items: items.map(({ label, ...rest }) => rest),
-    })).data,
+    mutationFn: async () => {
+      const r = (await api.post("/api/requests", {
+        title, note,
+        items: items.map(({ label, ...rest }) => rest),
+      })).data;
+      const text = comment.trim();
+      if (text) await api.post(`/api/requests/${r.id}/comments`, { text });
+      return r;
+    },
     onSuccess: (r: any) => nav(`/requests/${r.id}`),
   });
 
@@ -45,6 +51,7 @@ export default function NewRequest() {
           <h3>Параметры заявки</h3>
           <div className="field"><label>Заголовок</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
           <div className="field"><label>Описание</label><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></div>
+          <div className="field"><label>Комментарий</label><textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Пояснение для согласующих (необязательно)" /></div>
 
           <h3 style={{ marginTop: 18 }}>Добавить изменение</h3>
           <div className="field"><label>Тип изменения</label>
