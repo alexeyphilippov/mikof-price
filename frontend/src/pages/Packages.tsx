@@ -7,9 +7,17 @@ import { submitEntityChange } from "../lib/entityAction";
 
 export default function Packages() {
   const { me } = useAuth();
+  const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const canCreate = me!.role !== "r4";
-  const { data, isLoading } = useQuery({ queryKey: ["packages"], queryFn: async () => (await api.get<Package[]>("/api/packages")).data });
+  const { data, isLoading } = useQuery({
+    queryKey: ["packages", search],
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      if (search) p.set("search", search);
+      return (await api.get<Package[]>(`/api/packages?${p}`)).data;
+    },
+  });
 
   return (
     <>
@@ -18,6 +26,9 @@ export default function Packages() {
         {canCreate && <button onClick={() => setShowCreate(!showCreate)}>{showCreate ? "Скрыть форму" : "Создать пакет"}</button>}
       </div>
       {showCreate && <CreatePackageForm onDone={() => setShowCreate(false)} />}
+      <div className="toolbar">
+        <input placeholder="Поиск по коду или названию…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
       <div className="card">
         <table>
           <thead><tr><th>Код</th><th>Название</th><th>Цена</th><th>Услуг</th><th>Статус</th></tr></thead>
