@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
 from app.core.db import get_db
-from app.models.models import AuditLog, EntityHistory, UserRole
+from app.models.models import AuditLog, EntityHistory, User, UserRole
 from app.schemas.schemas import AuditLogOut, EntityHistoryOut, PageOut
 
 router = APIRouter(prefix="/api", tags=["audit"])
