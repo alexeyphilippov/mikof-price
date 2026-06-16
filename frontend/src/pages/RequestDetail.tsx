@@ -55,7 +55,8 @@ export default function RequestDetail() {
   const { data: r } = useQuery({
     queryKey: ["request", id],
     queryFn: async () => (await api.get<ChangeRequest>(`/api/requests/${id}`)).data,
-    refetchInterval: 4000,
+    refetchInterval: 1000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
   const { groups, subgroups, executors, locations, clinics } = useRefs();
@@ -103,7 +104,7 @@ export default function RequestDetail() {
       return { prev };
     },
     onError: (_e, _text, ctx) => { if (ctx?.prev) qc.setQueryData(["request", id], ctx.prev); },
-    onSettled: () => invalidate(),
+    onSuccess: async () => { await qc.refetchQueries({ queryKey: ["request", id] }); },
   });
 
   useEffect(() => {
