@@ -1,10 +1,17 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, request as pwRequest } from "@playwright/test";
 
-test("H7: оптимистичный комментарий и NRT-подгрузка", async ({ page, context, browser }) => {
-  const login = await context.request.post("/api/auth/login", {
+async function apiLogin(email: string, password: string) {
+  const api = await pwRequest.newContext({ baseURL: "https://mikofai.ru" });
+  const r = await api.post("/api/auth/login", { data: { email, password } });
+  expect(r.ok()).toBeTruthy();
+  const xsrf = (await api.storageState()).cookies.find((c) => c.name === "XSRF-TOKEN")?.value ?? "";
+  return { api, xsrf };
+}
+
+test("H7: оптимистичный комментарий и NRT-подгрузка", async ({ page, context }) => {
+  await context.request.post("/api/auth/login", {
     data: { email: "gen@mikofai.ru", password: "e5aaa0923588c460a3" },
   });
-  expect(login.ok()).toBeTruthy();
 
   const list = await (await context.request.get("/api/requests")).json();
   const req = list[0];
@@ -19,13 +26,13 @@ test("H7: оптимистичный комментарий и NRT-подгру�
   await expect(page.locator(".comment").filter({ hasText: marker })).toBeVisible({ timeout: 2000 });
 
   const nrt = `H7-nrt-${Date.now()}`;
-  const ctx2 = await browser.newContext({ baseURL: "https://mikofai.ru" });
-  await ctx2.request.post("/api/auth/login", {
-    data: { email: "med@mikofai.ru", password: "d738c3f18a5914b1df" },
+  const { api, xsrf } = await apiLogin("cfo@mikofai.ru", "d738c3f18a5914b1df");
+  const post = await api.post(`/api/requests/${req.id}/comments`, {
+    data: { text: nrt },
+    headers: { "X-XSRF-TOKEN": xsrf },
   });
-  const post = await ctx2.request.post(`/api/requests/${req.id}/comments`, { data: { text: nrt } });
   expect(post.ok()).toBeTruthy();
-  await ctx2.close();
+  await api.dispose();
 
   await expect(page.locator(".comment").filter({ hasText: nrt })).toBeVisible({ timeout: 8000 });
 });
