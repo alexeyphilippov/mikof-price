@@ -20,6 +20,7 @@ export default function ServiceDetail() {
   const qc = useQueryClient();
   const canEditMed = me!.role === "r1" || me!.role === "r3";
   const canEditFin = me!.role === "r1" || me!.role === "r2";
+  const canViewPrices = me!.role !== "r4";
   const viaRequest = me!.role !== "r1";
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -173,7 +174,7 @@ export default function ServiceDetail() {
             </>
           )}
         </div>
-        {canEditFin && (
+        {canViewPrices && (
           <div className="card">
             <h3>Цены по клиникам</h3>
             <table>
@@ -192,7 +193,7 @@ export default function ServiceDetail() {
                     />
                   );
                 })}
-                {!clinics?.length && <tr><td colSpan={5} className="muted">Нет клиник</td></tr>}
+                {!clinics?.length && <tr><td colSpan={canEditFin ? 5 : 4} className="muted">Нет клиник</td></tr>}
               </tbody>
             </table>
           </div>
