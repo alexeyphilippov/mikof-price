@@ -19,6 +19,29 @@ const ENTITY_LABELS: Record<string, string> = {
   executor: "Исполнитель", location: "Место", clinic: "Клиника",
 };
 
+type ReqItem = ChangeRequest["items"][number];
+const isPriceItem = (et: string) => et === "service_price" || et === "package_price";
+
+const scalar = (raw: any, field?: string) => {
+  if (raw == null) return raw;
+  if (typeof raw === "object" && "v" in raw) return raw.v;
+  if (field && typeof raw === "object" && field in raw) return raw[field];
+  return raw;
+};
+
+const itemEditStr = (it: ReqItem): string => {
+  const raw = it.r2_override_value ?? it.new_value;
+  if (isPriceItem(it.entity_type)) return raw?.price != null ? String(raw.price) : "";
+  const v = scalar(raw, it.field_name);
+  return v != null && v !== "" ? String(v) : "";
+};
+
+const buildNewValue = (it: ReqItem, val: string): any => {
+  const raw = it.new_value ?? {};
+  if (isPriceItem(it.entity_type)) return { ...raw, price: val === "" ? null : Number(val) };
+  return { v: val };
+};
+
 export default function RequestDetail() {
   const { id } = useParams();
   const { me } = useAuth();
@@ -27,8 +50,7 @@ export default function RequestDetail() {
   const [note, setNote] = useState("");
   const [overrides, setOverrides] = useState<Record<number, string>>({});
   const [editing, setEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editNote, setEditNote] = useState("");
+  const [editItems, setEditItems] = useState<Record<number, string>>({});
 
   const { data: r } = useQuery({ queryKey: ["request", id], queryFn: async () => (await api.get<ChangeRequest>(`/api/requests/${id}`)).data });
   const { groups, subgroups, executors, locations, clinics } = useRefs();
@@ -44,7 +66,16 @@ export default function RequestDetail() {
     onSuccess: invalidate,
   });
   const saveEdit = useMutation({
-    mutationFn: async () => api.patch(`/api/requests/${id}`, { title: editTitle, note: editNote || null }),
+    mutationFn: async () => {
+      const items = r!.items.map((it) => ({
+        entity_type: it.entity_type,
+        entity_id: it.entity_id,
+        field_name: it.field_name,
+        old_value: it.old_value,
+        new_value: buildNewValue(it, editItems[it.id] ?? itemEditStr(it)),
+      }));
+      return api.patch(`/api/requests/${id}`, { items });
+    },
     onSuccess: () => { setEditing(false); invalidate(); },
   });
   const actErr = act.isError ? ((act.error as any)?.response?.data?.detail ?? "Не удалось выполнить действие") : "";
@@ -56,22 +87,17 @@ export default function RequestDetail() {
 
   useEffect(() => {
     if (editing && r) {
-      setEditTitle(r.title);
-      setEditNote(r.note ?? "");
+      const m: Record<number, string> = {};
+      for (const it of r.items) m[it.id] = itemEditStr(it);
+      setEditItems(m);
     }
-  }, [editing, r?.title, r?.note]);
+  }, [editing, r]);
 
   if (!r) return <div className="muted">Загрузка…</div>;
 
   const FK_LIST: Record<string, Ref[] | undefined> = {
     group_id: groups, subgroup_id: subgroups, executor_id: executors,
     location_id: locations, clinic_id: clinics,
-  };
-  const scalar = (raw: any, field?: string) => {
-    if (raw == null) return raw;
-    if (typeof raw === "object" && "v" in raw) return raw.v;
-    if (field && typeof raw === "object" && field in raw) return raw[field];
-    return raw;
   };
   const fmtVal = (field: string, raw: any): string => {
     const v = scalar(raw, field);
@@ -85,7 +111,7 @@ export default function RequestDetail() {
     }
     return String(v);
   };
-  const fmtPriceItem = (it: ChangeRequest["items"][number]): string => {
+  const fmtPriceItem = (it: ReqItem): string => {
     const raw = it.r2_override_value ?? it.new_value;
     if (!raw || typeof raw !== "object") return fmtVal(it.field_name, raw);
     const parts: string[] = [];
@@ -94,13 +120,43 @@ export default function RequestDetail() {
     }
     return parts.join(", ") || "—";
   };
-  const clinicName = (it: ChangeRequest["items"][number]) => {
+  const clinicName = (it: ReqItem) => {
     const raw = it.r2_override_value ?? it.new_value;
     if (!raw || typeof raw !== "object" || raw.clinic_id == null) return "—";
     return clinics?.find((c) => c.id === raw.clinic_id)?.name_ru ?? `#${raw.clinic_id}`;
   };
-  const isPriceItem = (et: string) => et === "service_price" || et === "package_price";
-  const entityLabel = (it: ChangeRequest["items"][number]) => ENTITY_LABELS[it.entity_type] ?? it.entity_type;
+  const entityLabel = (it: ReqItem) => ENTITY_LABELS[it.entity_type] ?? it.entity_type;
+
+  const renderNewCell = (it: ReqItem) => {
+    const canOverride = isR2 && r.status === "pending_cfd" && it.entity_type === "service_price";
+    if (canOverride) {
+      return (
+        <div className="row" style={{ alignItems: "center", gap: 6 }}>
+          <span className="muted" style={{ flex: "0 0 auto" }}>{it.new_value?.price} →</span>
+          <input type="number" style={{ maxWidth: 120 }} placeholder={String(it.new_value?.price ?? "")}
+            value={overrides[it.id] ?? ""} onChange={(e) => setOverrides({ ...overrides, [it.id]: e.target.value })} />
+        </div>
+      );
+    }
+    if (editing && canEdit) {
+      const val = editItems[it.id] ?? "";
+      const set = (v: string) => setEditItems({ ...editItems, [it.id]: v });
+      const fk = FK_LIST[it.field_name];
+      if (fk) {
+        return (
+          <select value={val} onChange={(e) => set(e.target.value)}>
+            <option value="">—</option>
+            {fk.map((x) => <option key={x.id} value={x.id}>{x.name_ru}</option>)}
+          </select>
+        );
+      }
+      return (
+        <input type={it.field_name === "duration_min" || isPriceItem(it.entity_type) ? "number" : "text"}
+          style={{ maxWidth: 160 }} value={val} onChange={(e) => set(e.target.value)} />
+      );
+    }
+    return isPriceItem(it.entity_type) ? fmtPriceItem(it) : fmtVal(it.field_name, it.r2_override_value ?? it.new_value);
+  };
 
   const isR2 = me!.role === "r2";
   const isR1 = me!.role === "r1";
@@ -115,74 +171,41 @@ export default function RequestDetail() {
   return (
     <>
       <div className="topbar">
-        <h1>Заявка №{r.id}: {editing ? editTitle : r.title}</h1>
+        <h1>Заявка №{r.id}: {r.title}</h1>
         <span className={`pill ${r.status}`}>{STATUS_NAMES[r.status]}</span>
       </div>
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: "span 2" }}>
-          {editing ? (
-            <>
-              <h3>Редактирование заявки</h3>
-              <div className="field"><label htmlFor="req-title">Заголовок</label>
-                <input id="req-title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-              </div>
-              <div className="field"><label htmlFor="req-note">Описание</label>
-                <textarea id="req-note" value={editNote} onChange={(e) => setEditNote(e.target.value)} rows={3} />
-              </div>
-              <div className="row">
-                <button disabled={!editTitle || saveEdit.isPending} onClick={() => saveEdit.mutate()}>Сохранить</button>
-                <button className="ghost" onClick={() => setEditing(false)}>Отмена</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <h3>Изменения</h3>
-              <p className="muted" style={{ marginTop: -6 }}>
-                Автор: <b>{r.author_name ?? `#${r.author_id}`}</b>
-                {r.participants && r.participants.length > 0 && (
-                  <> · Участники: {r.participants.map((p) => `${p.name} (${ROLE_NAMES[p.role]})`).join(", ")}</>
-                )}
-              </p>
-              {r.note && <p className="muted">{r.note}</p>}
-            </>
-          )}
-          {!editing && (
-            <>
-              <table>
-                <thead><tr><th>Сущность</th><th>Клиника</th><th>Поле</th><th>Было</th><th>Станет</th></tr></thead>
-                <tbody>
-                  {r.items.map((it) => {
-                    const canOverride = isR2 && r.status === "pending_cfd" && it.entity_type === "service_price";
-                    return (
-                      <tr key={it.id}>
-                        <td>{entityLabel(it)}</td>
-                        <td>{isPriceItem(it.entity_type) ? clinicName(it) : "—"}</td>
-                        <td>{FIELD_LABELS[it.field_name] ?? it.field_name}</td>
-                        <td className="muted">{isPriceItem(it.entity_type) ? "—" : fmtVal(it.field_name, it.old_value)}</td>
-                        <td>
-                          {canOverride ? (
-                            <div className="row" style={{ alignItems: "center", gap: 6 }}>
-                              <span className="muted" style={{ flex: "0 0 auto" }}>{it.new_value?.price} →</span>
-                              <input type="number" style={{ maxWidth: 120 }} placeholder={String(it.new_value?.price ?? "")}
-                                value={overrides[it.id] ?? ""} onChange={(e) => setOverrides({ ...overrides, [it.id]: e.target.value })} />
-                            </div>
-                          ) : isPriceItem(it.entity_type) ? fmtPriceItem(it) : fmtVal(it.field_name, it.r2_override_value ?? it.new_value)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {r.items.length === 0 && <tr><td colSpan={5} className="muted">Без изменений данных</td></tr>}
-                </tbody>
-              </table>
-              {affected.length > 0 && (
-                <div style={{ marginTop: 18 }}>
-                  <h3>Затрагиваемые сущности</h3>
-                  {affected.map((it) => (
-                    <EntityCard key={`${it.entity_type}:${it.entity_id}`} entityType={it.entity_type} entityId={it.entity_id!} />
-                  ))}
-                </div>
-              )}
-            </>
+          <h3>Изменения{editing ? " — правка" : ""}</h3>
+          <p className="muted" style={{ marginTop: -6 }}>
+            Автор: <b>{r.author_name ?? `#${r.author_id}`}</b>
+            {r.participants && r.participants.length > 0 && (
+              <> · Участники: {r.participants.map((p) => `${p.name} (${ROLE_NAMES[p.role]})`).join(", ")}</>
+            )}
+          </p>
+          {r.note && <p className="muted">{r.note}</p>}
+          <table>
+            <thead><tr><th>Сущность</th><th>Клиника</th><th>Поле</th><th>Было</th><th>Станет</th></tr></thead>
+            <tbody>
+              {r.items.map((it) => (
+                <tr key={it.id}>
+                  <td>{entityLabel(it)}</td>
+                  <td>{isPriceItem(it.entity_type) ? clinicName(it) : "—"}</td>
+                  <td>{FIELD_LABELS[it.field_name] ?? it.field_name}</td>
+                  <td className="muted">{isPriceItem(it.entity_type) ? "—" : fmtVal(it.field_name, it.old_value)}</td>
+                  <td>{renderNewCell(it)}</td>
+                </tr>
+              ))}
+              {r.items.length === 0 && <tr><td colSpan={5} className="muted">Без изменений данных</td></tr>}
+            </tbody>
+          </table>
+          {affected.length > 0 && (
+            <div style={{ marginTop: 18 }}>
+              <h3>Затрагиваемые сущности</h3>
+              {affected.map((it) => (
+                <EntityCard key={`${it.entity_type}:${it.entity_id}`} entityType={it.entity_type} entityId={it.entity_id!} />
+              ))}
+            </div>
           )}
 
           <div style={{ marginTop: 18 }}>
@@ -212,6 +235,12 @@ export default function RequestDetail() {
                     act.mutate({ url: "reject", body: { note, final: true } });
                 }}>Отклонить заявку</button>
               </div>
+            )}
+            {canEdit && editing && (
+              <>
+                <button disabled={saveEdit.isPending} onClick={() => saveEdit.mutate()}>Сохранить</button>
+                <button className="ghost" style={{ marginLeft: 8 }} onClick={() => setEditing(false)}>Отмена</button>
+              </>
             )}
             {canEdit && !editing && (
               <>
