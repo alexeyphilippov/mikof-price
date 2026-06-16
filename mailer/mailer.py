@@ -4,6 +4,7 @@
 В локальной среде внешний SMTP может быть недоступен — ошибка логируется,
 но не роняет вызывающий сервис (отправка идёт фоном со стороны backend).
 """
+import logging
 import os
 import smtplib
 import ssl
@@ -11,6 +12,9 @@ from email.message import EmailMessage
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Mikofai Mailer")
 
@@ -48,6 +52,8 @@ def send(mail: Mail):
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx, timeout=15) as s:
             s.login(SMTP_LOGIN, SMTP_PASSWORD)
             s.send_message(msg)
+        logger.info("sent to %s: %s", mail.to, mail.subject)
         return {"sent": True}
     except Exception as e:  # noqa: BLE001 — деградируем мягко в локальной среде
+        logger.error("SMTP failed to %s: %s", mail.to, e)
         return {"sent": False, "error": str(e)}

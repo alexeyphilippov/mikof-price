@@ -64,7 +64,45 @@ def test_rbac_r3_cannot_request_service_price(r3):
     assert r3.post("/api/requests", json=payload).status_code == 403
 
 
+def test_rbac_r3_cannot_request_clinic_change(r3):
+    clinics = r3.get("/api/clinics").json()
+    assert clinics
+    payload = {
+        "title": "r3 forbidden clinic",
+        "items": [{"entity_type": "clinic", "entity_id": clinics[0]["id"],
+                   "field_name": "address", "old_value": {"v": "a"}, "new_value": {"v": "b"}}],
+    }
+    assert r3.post("/api/requests", json=payload).status_code == 403
+
+
 # --- WORKFLOW ---
+
+def test_author_cancel_request(r3):
+    sid = _first_service_id(r3)
+    payload = {
+        "title": "cancel test",
+        "items": [{"entity_type": "service", "entity_id": sid,
+                   "field_name": "note", "old_value": {"v": ""}, "new_value": {"v": "cancel-me"}}],
+    }
+    req = r3.post("/api/requests", json=payload).json()
+    assert r3.patch(f"/api/requests/{req['id']}/submit").status_code == 200
+    assert r3.patch(f"/api/requests/{req['id']}/cancel").status_code == 200
+    assert r3.get(f"/api/requests/{req['id']}").json()["status"] == "cancelled"
+
+
+def test_cancel_forbidden_after_approve(r1, r2, r3):
+    sid = _first_service_id(r3)
+    payload = {
+        "title": "no cancel after approve",
+        "items": [{"entity_type": "service", "entity_id": sid,
+                   "field_name": "note", "old_value": {"v": ""}, "new_value": {"v": "x"}}],
+    }
+    req = r3.post("/api/requests", json=payload).json()
+    r3.patch(f"/api/requests/{req['id']}/submit")
+    r2.patch(f"/api/requests/{req['id']}/approve", json={})
+    r1.patch(f"/api/requests/{req['id']}/approve", json={})
+    assert r3.patch(f"/api/requests/{req['id']}/cancel").status_code == 400
+
 
 def test_workflow_r3_request_full_cycle(r1, r2, r3):
     sid = _first_service_id(r3)

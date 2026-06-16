@@ -231,6 +231,7 @@ class RequestStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     revision = "revision"
+    cancelled = "cancelled"
 
 
 class ChangeRequest(Base):

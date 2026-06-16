@@ -22,11 +22,13 @@ export default function Clinics() {
   const qc = useQueryClient();
   const role = me!.role;
   const viaRequest = role !== "r1";
-  const canWrite = role === "r1" || role === "r3";
+  const canWrite = role === "r1";
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState(EMPTY);
   const [archiveTarget, setArchiveTarget] = useState<Clinic | null>(null);
+  const [err, setErr] = useState("");
+  const phoneOk = !form.phone || /^[+\d][\d\s()\-]{4,}$/.test(form.phone);
 
   const { data } = useQuery({ queryKey: ["clinics"], queryFn: async () => (await api.get<Clinic[]>("/api/clinics")).data });
   const { data: usage } = useQuery({
@@ -40,7 +42,8 @@ export default function Clinics() {
   const create = useMutation({
     mutationFn: async () => submitEntityChange(role, async () => { await api.post("/api/clinics", form); },
       { title: `Создание клиники ${form.code}`, items: [{ entity_type: "clinic_create", field_name: "create", old_value: null, new_value: form }] }),
-    onSuccess: (reqId) => { setForm(EMPTY); refresh(reqId); },
+    onSuccess: (reqId) => { setForm(EMPTY); setErr(""); refresh(reqId); },
+    onError: (e: any) => setErr(e?.response?.data?.detail ?? "Ошибка создания клиники"),
   });
 
   const saveEdit = useMutation({
@@ -110,9 +113,11 @@ export default function Clinics() {
               <input value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
             </div>
           ))}
-          <button style={{ width: "100%" }} disabled={!form.code || !form.name_ru || create.isPending} onClick={() => create.mutate()}>
+          {!phoneOk && <p className="err" style={{ fontSize: 13 }}>Телефон может содержать только цифры, пробелы и + - ( )</p>}
+          <button style={{ width: "100%" }} disabled={!form.code || !form.name_ru || !phoneOk || create.isPending} onClick={() => create.mutate()}>
             {viaRequest ? "Через заявку" : "Добавить"}
           </button>
+          {err && <p className="err" style={{ fontSize: 13 }}>{err}</p>}
         </div>}
       </div>
 

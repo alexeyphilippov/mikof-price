@@ -101,7 +101,10 @@ function CreateServiceForm({ onDone }: { onDone: () => void }) {
       onDone();
       if (reqId) nav(`/requests/${reqId}`);
     },
-    onError: () => setErr("Ошибка создания. Проверьте уникальность кода и заполненность полей."),
+    onError: (e: any) => {
+      const d = e?.response?.data?.detail;
+      setErr(Array.isArray(d) ? d.map((x: any) => x.msg).join("; ") : (d ?? "Ошибка создания. Проверьте уникальность кода и заполненность полей."));
+    },
   });
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -119,19 +122,19 @@ function CreateServiceForm({ onDone }: { onDone: () => void }) {
         <div className="field"><label>Группа</label>
           <select value={form.group_id} onChange={set("group_id")}>
             <option value="">—</option>
-            {groups?.map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name_ru}</option>)}
+            {groups?.filter((g) => g.status !== "archived").map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name_ru}</option>)}
           </select>
         </div>
         <div className="field"><label>Подгруппа</label>
           <select value={form.subgroup_id} onChange={set("subgroup_id")}>
             <option value="">—</option>
-            {subgroups?.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name_ru}</option>)}
+            {subgroups?.filter((s) => s.status !== "archived").map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name_ru}</option>)}
           </select>
         </div>
         <div className="field"><label>Исполнитель</label>
           <select value={form.executor_id} onChange={set("executor_id")}>
             <option value="">—</option>
-            {executors?.map((e) => <option key={e.id} value={e.id}>{e.name_ru}</option>)}
+            {executors?.filter((e) => e.status !== "archived").map((e) => <option key={e.id} value={e.id}>{e.name_ru}</option>)}
           </select>
         </div>
       </div>
@@ -139,7 +142,7 @@ function CreateServiceForm({ onDone }: { onDone: () => void }) {
         <div className="field"><label>Место оказания</label>
           <select value={form.location_id} onChange={set("location_id")}>
             <option value="">—</option>
-            {locations?.map((l) => <option key={l.id} value={l.id}>{l.name_ru}</option>)}
+            {locations?.filter((l) => l.status !== "archived").map((l) => <option key={l.id} value={l.id}>{l.name_ru}</option>)}
           </select>
         </div>
         <div className="field"><label>Длительность (мин)</label><input type="number" value={form.duration_min} onChange={set("duration_min")} /></div>

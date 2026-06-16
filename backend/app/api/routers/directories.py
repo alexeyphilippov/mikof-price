@@ -13,12 +13,15 @@ from app.schemas.schemas import (
     ExecutorOut, ExecutorCreate, LocationOut, LocationCreate,
     ClinicOut, ClinicCreate, ClinicUpdate,
 )
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles, log_action
 
 router = APIRouter(prefix="/api", tags=["directories"])
 
 # Ф32: прямые правки справочников — только R1; R3 — через заявки
 _r1 = require_roles(UserRole.r1)
+
+# Создание новых записей справочников запрещено: можно только править и архивировать (B05)
+_NO_CREATE = HTTPException(403, "Создание новых записей справочника запрещено")
 
 
 async def _patch_with_history(db: AsyncSession, model, id: int, data: dict, entity_type: str, user: User):
@@ -37,6 +40,7 @@ async def _patch_with_history(db: AsyncSession, model, id: int, data: dict, enti
             setattr(obj, field, new_val)
     await db.commit()
     await db.refresh(obj)
+    await log_action(db, user.id, f"update_{entity_type}", entity_type, id)
     return obj
 
 
@@ -48,12 +52,8 @@ async def list_groups(db: AsyncSession = Depends(get_db), _=Depends(get_current_
 
 
 @router.post("/groups", response_model=GroupOut)
-async def create_group(body: GroupCreate, db: AsyncSession = Depends(get_db), _=Depends(_r1)):
-    obj = ServiceGroup(**body.model_dump())
-    db.add(obj)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
+async def create_group(_=Depends(_r1)):
+    raise _NO_CREATE
 
 
 @router.patch("/groups/{id}", response_model=GroupOut)
@@ -69,12 +69,8 @@ async def list_subgroups(db: AsyncSession = Depends(get_db), _=Depends(get_curre
 
 
 @router.post("/subgroups", response_model=SubgroupOut)
-async def create_subgroup(body: SubgroupCreate, db: AsyncSession = Depends(get_db), _=Depends(_r1)):
-    obj = ServiceSubgroup(**body.model_dump())
-    db.add(obj)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
+async def create_subgroup(_=Depends(_r1)):
+    raise _NO_CREATE
 
 
 @router.patch("/subgroups/{id}", response_model=SubgroupOut)
@@ -90,12 +86,8 @@ async def list_executors(db: AsyncSession = Depends(get_db), _=Depends(get_curre
 
 
 @router.post("/executors", response_model=ExecutorOut)
-async def create_executor(body: ExecutorCreate, db: AsyncSession = Depends(get_db), _=Depends(_r1)):
-    obj = Executor(**body.model_dump())
-    db.add(obj)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
+async def create_executor(_=Depends(_r1)):
+    raise _NO_CREATE
 
 
 @router.patch("/executors/{id}", response_model=ExecutorOut)
@@ -111,12 +103,8 @@ async def list_locations(db: AsyncSession = Depends(get_db), _=Depends(get_curre
 
 
 @router.post("/locations", response_model=LocationOut)
-async def create_location(body: LocationCreate, db: AsyncSession = Depends(get_db), _=Depends(_r1)):
-    obj = Location(**body.model_dump())
-    db.add(obj)
-    await db.commit()
-    await db.refresh(obj)
-    return obj
+async def create_location(_=Depends(_r1)):
+    raise _NO_CREATE
 
 
 @router.patch("/locations/{id}", response_model=LocationOut)
@@ -198,11 +186,12 @@ async def list_clinics(db: AsyncSession = Depends(get_db), _=Depends(get_current
 
 
 @router.post("/clinics", response_model=ClinicOut)
-async def create_clinic(body: ClinicCreate, db: AsyncSession = Depends(get_db), _=Depends(_r1)):
+async def create_clinic(body: ClinicCreate, db: AsyncSession = Depends(get_db), user: User = Depends(_r1)):
     obj = Clinic(**body.model_dump())
     db.add(obj)
     await db.commit()
     await db.refresh(obj)
+    await log_action(db, user.id, "create_clinic", "clinic", obj.id)
     return obj
 
 
