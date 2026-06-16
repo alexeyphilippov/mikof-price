@@ -74,6 +74,12 @@ function CreateServiceForm({ onDone }: { onDone: () => void }) {
   const { data: executors } = useQuery({ queryKey: ["executors"], queryFn: async () => (await api.get<Ref[]>("/api/executors")).data });
   const { data: locations } = useQuery({ queryKey: ["locations"], queryFn: async () => (await api.get<Ref[]>("/api/locations")).data });
 
+  const group = groups?.find((g) => g.id === Number(form.group_id));
+  const subgroup = subgroups?.find((s) => s.id === Number(form.subgroup_id));
+  const codePrefix = group && subgroup ? `${group.code}-${subgroup.code}-` : "";
+  const codeValid = !!codePrefix && form.code.startsWith(codePrefix);
+  const canSubmit = !!(form.group_id && form.subgroup_id && form.name_ru && codeValid);
+
   const create = useMutation({
     mutationFn: async () => {
       const payload: any = {
@@ -111,35 +117,51 @@ function CreateServiceForm({ onDone }: { onDone: () => void }) {
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm({ ...form, [k]: e.target.value });
 
+  const setGroup = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const group_id = e.target.value;
+    setForm({ ...form, group_id, subgroup_id: "", code: "" });
+  };
+
+  const setSubgroup = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const subgroup_id = e.target.value;
+    const g = groups?.find((x) => x.id === Number(form.group_id));
+    const sg = subgroups?.find((x) => x.id === Number(subgroup_id));
+    const prefix = g && sg ? `${g.code}-${sg.code}-` : "";
+    setForm({ ...form, subgroup_id, code: prefix });
+  };
+
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <h3>Новая услуга {isR3 && <span className="tag">(будет отправлена на согласование)</span>}</h3>
       <div className="row">
-        <div className="field"><label>Код *</label><input value={form.code} onChange={set("code")} placeholder="G-001-CON-XXX" /></div>
+        <div className="field"><label>Группа *</label>
+          <select value={form.group_id} onChange={setGroup}>
+            <option value="">— выберите —</option>
+            {groups?.filter((g) => g.status !== "archived").map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name_ru}</option>)}
+          </select>
+        </div>
+        <div className="field"><label>Подгруппа *</label>
+          <select value={form.subgroup_id} onChange={setSubgroup} disabled={!form.group_id}>
+            <option value="">— выберите —</option>
+            {subgroups?.filter((s) => s.status !== "archived").map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name_ru}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="row">
+        <div className="field"><label>Код *</label>
+          <input value={form.code} onChange={set("code")} placeholder={codePrefix || "G-001-CON-001"} disabled={!codePrefix} />
+          {codePrefix && !codeValid && form.code && <div className="err">Код должен начинаться с {codePrefix}</div>}
+        </div>
         <div className="field"><label>Название (RU) *</label><input value={form.name_ru} onChange={set("name_ru")} /></div>
         <div className="field"><label>Название (RO)</label><input value={form.name_ro} onChange={set("name_ro")} /></div>
       </div>
       <div className="row">
-        <div className="field"><label>Группа</label>
-          <select value={form.group_id} onChange={set("group_id")}>
-            <option value="">—</option>
-            {groups?.filter((g) => g.status !== "archived").map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name_ru}</option>)}
-          </select>
-        </div>
-        <div className="field"><label>Подгруппа</label>
-          <select value={form.subgroup_id} onChange={set("subgroup_id")}>
-            <option value="">—</option>
-            {subgroups?.filter((s) => s.status !== "archived").map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name_ru}</option>)}
-          </select>
-        </div>
         <div className="field"><label>Исполнитель</label>
           <select value={form.executor_id} onChange={set("executor_id")}>
             <option value="">—</option>
             {executors?.filter((e) => e.status !== "archived").map((e) => <option key={e.id} value={e.id}>{e.name_ru}</option>)}
           </select>
         </div>
-      </div>
-      <div className="row">
         <div className="field"><label>Место оказания</label>
           <select value={form.location_id} onChange={set("location_id")}>
             <option value="">—</option>
@@ -148,7 +170,7 @@ function CreateServiceForm({ onDone }: { onDone: () => void }) {
         </div>
         <div className="field"><label>Длительность (мин)</label><input type="number" value={form.duration_min} onChange={set("duration_min")} /></div>
         <div className="field" style={{ display: "flex", alignItems: "flex-end" }}>
-          <button style={{ width: "100%" }} disabled={!form.code || !form.name_ru || create.isPending} onClick={() => create.mutate()}>
+          <button style={{ width: "100%" }} disabled={!canSubmit || create.isPending} onClick={() => create.mutate()}>
             {isR3 ? "Создать и отправить на согласование" : "Создать"}
           </button>
         </div>

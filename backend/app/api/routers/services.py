@@ -6,7 +6,7 @@ from sqlalchemy import select, and_, func
 from app.core.db import get_db
 from app.models.models import (
     Service, ServicePrice, ServiceStatus, UserRole, EntityHistory, User,
-    Clinic, ClinicStatus,
+    Clinic, ClinicStatus, ServiceGroup, ServiceSubgroup,
 )
 from app.schemas.schemas import (
     ServiceOut, ServiceCreate, ServiceUpdate, ServicePriceOut, ServicePriceCreate,
@@ -74,6 +74,13 @@ async def create_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(_r1r3),
 ):
+    if body.group_id and body.subgroup_id:
+        g = await db.get(ServiceGroup, body.group_id)
+        sg = await db.get(ServiceSubgroup, body.subgroup_id)
+        if g and sg:
+            prefix = f"{g.code}-{sg.code}-"
+            if not body.code.startswith(prefix):
+                raise HTTPException(400, f"Код должен начинаться с {prefix}")
     obj = Service(**body.model_dump(), created_by=user.id)
     if user.role == UserRole.r3:
         obj.status = ServiceStatus.pending
