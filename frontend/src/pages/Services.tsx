@@ -30,7 +30,7 @@ export default function Services() {
       </div>
       {showCreate && <CreateServiceForm onDone={() => setShowCreate(false)} />}
       <div className="toolbar">
-        <input placeholder="Поиск по названию…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input placeholder="Поиск по коду или названию…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select value={group} onChange={(e) => setGroup(e.target.value)}>
           <option value="">Все группы</option>
           {groups?.map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name_ru}</option>)}

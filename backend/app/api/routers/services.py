@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 
 from app.core.db import get_db
 from app.models.models import (
@@ -45,7 +45,11 @@ async def list_services(
     if subgroup_id:
         filters.append(Service.subgroup_id == subgroup_id)
     if search:
-        filters.append(Service.name_ru.collate("und-x-icu").ilike(f"%{search}%"))
+        pat = f"%{search}%"
+        filters.append(or_(
+            Service.name_ru.collate("und-x-icu").ilike(pat),
+            Service.code.collate("und-x-icu").ilike(pat),
+        ))
     if filters:
         q = q.where(and_(*filters))
     res = await db.execute(q.order_by(Service.code))
