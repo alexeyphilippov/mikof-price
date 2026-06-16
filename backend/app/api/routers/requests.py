@@ -400,6 +400,8 @@ async def reject_request(
         elif body.send_to == "r2":
             req.status = RequestStatus.pending_cfd
         elif body.send_to == "r3":
+            if not req.author or req.author.role != UserRole.r3:
+                raise HTTPException(400, "Вернуть меддиректору можно только заявку, созданную меддиректором")
             req.status = RequestStatus.revision
         else:
             raise HTTPException(400, "Invalid transition")

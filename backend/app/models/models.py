@@ -258,6 +258,10 @@ class ChangeRequest(Base):
         return self.author.name if self.author else None
 
     @property
+    def author_role(self) -> Optional[str]:
+        return self.author.role.value if self.author else None
+
+    @property
     def participants(self) -> list[dict]:
         seen: dict[int, dict] = {}
 
