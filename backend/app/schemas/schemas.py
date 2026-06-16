@@ -350,6 +350,12 @@ class ChangeRequestCreate(BaseModel):
     items: list[dict] = []
 
 
+class ChangeRequestUpdate(BaseModel):
+    title: Optional[str] = None
+    note: Optional[str] = None
+    items: Optional[list[dict]] = None
+
+
 class RequestApproveInput(BaseModel):
     note: Optional[str] = None
     r2_overrides: Optional[dict[int, Any]] = None  # item_id → override_value

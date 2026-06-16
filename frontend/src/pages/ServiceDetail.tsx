@@ -20,6 +20,7 @@ export default function ServiceDetail() {
   const qc = useQueryClient();
   const canEditMed = me!.role === "r1" || me!.role === "r3";
   const canEditFin = me!.role === "r1" || me!.role === "r2";
+  const canViewPrices = me!.role !== "r4";
   const viaRequest = me!.role !== "r1";
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -188,13 +189,24 @@ export default function ServiceDetail() {
             </>
           )}
         </div>
-        {canEditFin && (
+        {canViewPrices && (
           <div className="card">
             <h3>Цены по клиникам</h3>
             <table>
               <thead><tr><th>Клиника</th><th>Цена</th><th>Online</th><th>Спец.</th></tr></thead>
               <tbody>
                 {(clinics ?? []).filter((c) => c.status === "active").map((c) => {
+                  const p = prices?.find((x) => x.clinic_id === c.id);
+                  if (!canEditFin) {
+                    return (
+                      <tr key={c.id}>
+                        <td>{c.name_ru}</td>
+                        <td>{p?.price ?? "—"} {p?.currency ?? "MDL"}</td>
+                        <td>{p?.price_online ?? "—"}</td>
+                        <td>{p?.price_special ?? "—"}</td>
+                      </tr>
+                    );
+                  }
                   const e = pe[c.id] ?? { price: "", online: "", special: "" };
                   const upd = (k: keyof PriceEdit, v: string) => setPe((prev) => ({ ...prev, [c.id]: { ...prev[c.id], [k]: v } }));
                   return (
@@ -209,7 +221,7 @@ export default function ServiceDetail() {
                 {!clinics?.length && <tr><td colSpan={4} className="muted">Нет клиник</td></tr>}
               </tbody>
             </table>
-            {!!clinics?.length && (
+            {canEditFin && !!clinics?.length && (
               <button style={{ marginTop: 12 }} disabled={savePrices.isPending} onClick={submitPrices}>
                 {me!.role === "r1" ? "Сохранить цены" : "Отправить на согласование"}
               </button>

@@ -1,7 +1,7 @@
 import enum
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles, log_action
@@ -33,6 +33,7 @@ from app.services.request_email import render_approval_email
 from app.schemas.schemas import (
     ChangeRequestCreate,
     ChangeRequestOut,
+    ChangeRequestUpdate,
     CommentCreate,
     PendingCount,
     RequestApproveInput,
@@ -272,6 +273,34 @@ async def get_request(
     req = await db.get(ChangeRequest, id)
     if not req:
         raise HTTPException(404)
+    return req
+
+
+@router.patch("/{id}", response_model=ChangeRequestOut)
+async def update_request(
+    id: int,
+    body: ChangeRequestUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.r2, UserRole.r3)),
+):
+    req = await db.get(ChangeRequest, id)
+    if not req or req.author_id != user.id:
+        raise HTTPException(404)
+    if req.status not in (RequestStatus.draft, RequestStatus.revision):
+        raise HTTPException(400, "Заявку можно редактировать только в черновике или на доработке")
+    data = body.model_dump(exclude_unset=True)
+    if "title" in data:
+        req.title = data["title"]
+    if "note" in data:
+        req.note = data["note"]
+    if "items" in data and data["items"] is not None:
+        _assert_items_allowed(user.role, data["items"])
+        await db.execute(delete(ChangeRequestItem).where(ChangeRequestItem.request_id == id))
+        for item in data["items"]:
+            db.add(ChangeRequestItem(request_id=id, **item))
+    await db.commit()
+    await db.refresh(req)
+    await log_action(db, user.id, "update_request", "change_request", id)
     return req
 
 
