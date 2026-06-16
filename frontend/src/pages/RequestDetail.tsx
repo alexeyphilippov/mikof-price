@@ -229,7 +229,9 @@ export default function RequestDetail() {
               <div className="row">
                 <button onClick={() => act.mutate({ url: "approve", body: { note } })}>Утвердить (применить)</button>
                 <button className="ghost" onClick={() => act.mutate({ url: "reject", body: { note, send_to: "r2" } })}>Вернуть финдиректору</button>
-                <button className="danger" onClick={() => act.mutate({ url: "reject", body: { note, send_to: "r3" } })}>Вернуть меддиректору</button>
+                {r.author_role === "r3" && (
+                  <button className="danger" onClick={() => act.mutate({ url: "reject", body: { note, send_to: "r3" } })}>Вернуть меддиректору</button>
+                )}
                 <button className="danger" onClick={() => {
                   if (window.confirm("Отклонить заявку окончательно? Изменения не будут применены."))
                     act.mutate({ url: "reject", body: { note, final: true } });

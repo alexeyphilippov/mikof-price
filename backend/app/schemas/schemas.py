@@ -334,6 +334,7 @@ class ChangeRequestOut(BaseModel):
     status: str
     author_id: int
     author_name: Optional[str] = None
+    author_role: Optional[str] = None
     participants: list[ParticipantOut] = []
     note: Optional[str]
     created_at: datetime

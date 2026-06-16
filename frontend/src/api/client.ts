@@ -47,7 +47,7 @@ export interface Package {
 export interface Participant { id: number; name: string; role: Role }
 
 export interface ChangeRequest {
-  id: number; title: string; status: string; author_id: number; author_name?: string;
+  id: number; title: string; status: string; author_id: number; author_name?: string; author_role?: string;
   participants?: Participant[]; note?: string;
   created_at: string; updated_at: string;
   items: { id: number; entity_type: string; entity_id?: number; field_name: string; old_value: any; new_value: any; r2_override_value: any }[];
