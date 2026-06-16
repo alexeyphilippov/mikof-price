@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, Clinic, Package, Service } from "../api/client";
+import RequestCommentField from "../components/RequestCommentField";
 
 const SERVICE_FIELDS = [
   { key: "name_ru", label: "Название (RU)" },
@@ -51,7 +52,7 @@ export default function NewRequest() {
           <h3>Параметры заявки</h3>
           <div className="field"><label>Заголовок</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
           <div className="field"><label>Описание</label><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></div>
-          <div className="field"><label>Комментарий</label><textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Пояснение для согласующих (необязательно)" /></div>
+          <RequestCommentField value={comment} onChange={setComment} />
 
           <h3 style={{ marginTop: 18 }}>Добавить изменение</h3>
           <div className="field"><label>Тип изменения</label>

@@ -5,6 +5,7 @@ import { api, Price, Ref, Service, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { useRefs } from "../lib/useRefs";
 import { submitEntityChange, ChangeItem } from "../lib/entityAction";
+import RequestCommentField from "../components/RequestCommentField";
 
 const EDITABLE = [
   { key: "name_ru", label: "Название (RU)" },
@@ -24,6 +25,7 @@ export default function ServiceDetail() {
   const viaRequest = me!.role !== "r1";
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [requestComment, setRequestComment] = useState("");
 
   const { data: s } = useQuery({ queryKey: ["service", id], queryFn: async () => (await api.get<Service>(`/api/services/${id}`)).data });
   const { data: prices } = useQuery({ queryKey: ["service-prices", id], queryFn: async () => (await api.get<Price[]>(`/api/services/${id}/prices`)).data });
@@ -46,11 +48,13 @@ export default function ServiceDetail() {
             old_value: { v: String((s as any)[field] ?? "") }, new_value: { v: String(v ?? "") },
           })),
         },
+        requestComment,
       );
       return reqId;
     },
     onSuccess: (reqId) => {
       setEdit(false);
+      setRequestComment("");
       if (reqId) { nav(`/requests/${reqId}`); return; }
       qc.invalidateQueries({ queryKey: ["service", id] });
       qc.invalidateQueries({ queryKey: ["service-history", id] });
@@ -76,8 +80,10 @@ export default function ServiceDetail() {
           old_value: null, new_value: { service_id: Number(id), currency: "MDL", ...r },
         })),
       },
+      requestComment,
     ),
     onSuccess: (reqId) => {
+      setRequestComment("");
       if (reqId) { nav(`/requests/${reqId}`); return; }
       qc.invalidateQueries({ queryKey: ["service-prices", id] });
     },
@@ -152,6 +158,11 @@ export default function ServiceDetail() {
       {canEditFin && viaRequest && !canEditMed && (
         <p className="tag">Изменение цен отправляется на согласование заявкой.</p>
       )}
+      {viaRequest && (canEditMed || canEditFin) && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <RequestCommentField value={requestComment} onChange={setRequestComment} />
+        </div>
+      )}
       <div className="grid cols-3">
         <div className="card">
           <h3>Параметры</h3>
@@ -184,7 +195,7 @@ export default function ServiceDetail() {
                 <button disabled={save.isPending} onClick={submitEdit}>
                   {me!.role === "r1" ? "Сохранить" : "Отправить на согласование"}
                 </button>
-                <button className="ghost" onClick={() => setEdit(false)}>Отмена</button>
+                <button className="ghost" onClick={() => { setEdit(false); setRequestComment(""); }}>Отмена</button>
               </div>
             </>
           )}
