@@ -308,7 +308,14 @@ export default function RequestDetail() {
           </div>
         ))}
         <div className="row" style={{ marginTop: 12 }}>
-          <input placeholder="Написать комментарий…" value={comment} onChange={(e) => setComment(e.target.value)} />
+          <input
+            placeholder="Написать комментарий…"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && comment.trim() && !addComment.isPending) addComment.mutate(comment);
+            }}
+          />
           <button style={{ flex: "0 0 auto" }} disabled={!comment || addComment.isPending} onClick={() => addComment.mutate(comment)}>Отправить</button>
         </div>
       </div>
