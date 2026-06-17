@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
@@ -49,7 +49,10 @@ async def _calc_package_price(db: AsyncSession, package_id: int, clinic_id: int)
 
 @router.get("", response_model=list[PackageOut])
 async def list_packages(
+    response: Response,
     search: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -60,7 +63,12 @@ async def list_packages(
             Package.name_ru.collate("und-x-icu").ilike(pat),
             Package.code.collate("und-x-icu").ilike(pat),
         ))
-    res = await db.execute(q.order_by(Package.code))
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    response.headers["X-Total-Count"] = str(total)
+    q = q.order_by(Package.code)
+    if limit is not None:
+        q = q.limit(limit).offset(offset)
+    res = await db.execute(q)
     packages = res.scalars().all()
     clinic_id = await _chisinau_clinic_id(db)
     prices: dict[int, Optional[float]] = {}

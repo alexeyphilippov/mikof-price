@@ -45,10 +45,14 @@ async def update_user(id: int, body: UserUpdate, db: AsyncSession = Depends(get_
     data = body.model_dump(exclude_unset=True)
     if "password" in data and data["password"]:
         obj.password_hash = hash_password(data.pop("password"))
+        obj.token_version += 1  # отзыв сессий при смене пароля (S7)
     else:
         data.pop("password", None)
     if "role" in data and data["role"]:
         obj.role = UserRole(data.pop("role"))
+        obj.token_version += 1  # роль изменилась — переавторизация (S7)
+    if data.get("is_active") is False:
+        obj.token_version += 1  # деактивация — мгновенный отзыв (S7)
     for k, v in data.items():
         setattr(obj, k, v)
     await db.commit()

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     admin_password: str
     seed_password: str
     mailer_url: str = "http://mailer:8001"
-    cookie_secure: bool = False
+    cookie_secure: bool = True
     cors_origins: str = "http://localhost:5173"
     login_rate_limit: str = "5/minute"
     app_base_url: str = "https://mikofai.ru"

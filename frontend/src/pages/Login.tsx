@@ -30,12 +30,12 @@ export default function Login() {
         <h1>mikof<span style={{ color: "var(--brand)" }}>ai</span></h1>
         <div className="sub">Панель управления прейскурантом</div>
         <div className="field">
-          <label>Email</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoFocus />
+          <label htmlFor="login-email">Email</label>
+          <input id="login-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoFocus />
         </div>
         <div className="field">
-          <label>Пароль</label>
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
+          <label htmlFor="login-password">Пароль</label>
+          <input id="login-password" value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
         </div>
         <button disabled={busy} style={{ width: "100%" }}>{busy ? "Вход…" : "Войти"}</button>
         {err && <div className="err">{err}</div>}

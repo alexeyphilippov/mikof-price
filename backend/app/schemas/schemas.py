@@ -356,16 +356,40 @@ class ChangeRequestOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+_ALLOWED_ITEM_TYPES = frozenset({
+    "service", "package", "group", "subgroup", "executor", "location", "clinic",
+    "service_create", "package_create", "group_create", "subgroup_create",
+    "executor_create", "location_create", "clinic_create",
+    "package_item_add", "package_item_remove", "package_price", "service_price",
+})
+
+
+class ChangeRequestItemIn(BaseModel):
+    entity_type: str
+    entity_id: Optional[int] = None
+    field_name: str = ""
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    r2_override_value: Optional[Any] = None
+
+    @field_validator("entity_type")
+    @classmethod
+    def _check_type(cls, v: str) -> str:
+        if v not in _ALLOWED_ITEM_TYPES:
+            raise ValueError(f"Недопустимый тип изменения: {v}")
+        return v
+
+
 class ChangeRequestCreate(BaseModel):
     title: str
     note: Optional[str] = None
-    items: list[dict] = []
+    items: list[ChangeRequestItemIn] = []
 
 
 class ChangeRequestUpdate(BaseModel):
     title: Optional[str] = None
     note: Optional[str] = None
-    items: Optional[list[dict]] = None
+    items: Optional[list[ChangeRequestItemIn]] = None
 
 
 class RequestApproveInput(BaseModel):

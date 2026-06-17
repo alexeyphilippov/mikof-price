@@ -60,7 +60,8 @@ export default function SortableTable<T>({
                 <input
                   value={filters[c.key] ?? ""}
                   onChange={(e) => setFilters({ ...filters, [c.key]: e.target.value })}
-                  placeholder="фильтр"
+                  placeholder={`Фильтр: ${c.label}`}
+                  aria-label={`Фильтр по колонке «${c.label}»`}
                   style={{ fontWeight: 400, textTransform: "none" }}
                 />
               )}

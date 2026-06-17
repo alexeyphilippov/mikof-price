@@ -1,6 +1,6 @@
 import enum
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,10 +58,10 @@ R3_SERVICE_FIELDS = frozenset({
 R3_PACKAGE_FIELDS = frozenset({"name_ru", "name_ro", "status"})
 
 
-def _assert_items_allowed(role: UserRole, items: list[dict]) -> None:
+def _assert_items_allowed(role: UserRole, items) -> None:
     for item in items:
-        et = item.get("entity_type", "")
-        fn = item.get("field_name", "")
+        et = item.entity_type
+        fn = item.field_name
         if role == UserRole.r2:
             if et not in R2_FINANCIAL:
                 raise HTTPException(403, f"Тип изменения «{et}» недоступен финансовому директору")
@@ -168,10 +168,12 @@ async def _apply_request(db: AsyncSession, req: ChangeRequest, actor_id: int):
                 if svc:
                     _set_field(db, svc, "service", "status", ServiceStatus.active, actor_id)
             else:
-                db.add(Service(**data, created_by=actor_id, status=ServiceStatus.active))
+                clean = {k: v for k, v in data.items() if hasattr(Service, k) and k != "id"}
+                db.add(Service(**clean, created_by=actor_id, status=ServiceStatus.active))
         elif et == "package_create":
             items_data = data.pop("items", [])
-            pkg = Package(**data, created_by=actor_id)
+            clean = {k: v for k, v in data.items() if hasattr(Package, k) and k != "id"}
+            pkg = Package(**clean, created_by=actor_id)
             db.add(pkg)
             await db.flush()
             for it in items_data:
@@ -215,8 +217,11 @@ async def _apply_request(db: AsyncSession, req: ChangeRequest, actor_id: int):
 
 @router.get("", response_model=list[ChangeRequestOut])
 async def list_requests(
+    response: Response,
     status: str | None = None,
     author_id: int | None = None,
+    limit: int | None = Query(None, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles(UserRole.r1, UserRole.r2, UserRole.r3)),
 ):
@@ -225,7 +230,12 @@ async def list_requests(
         query = query.where(ChangeRequest.status == status)
     if author_id:
         query = query.where(ChangeRequest.author_id == author_id)
-    result = await db.execute(query.order_by(ChangeRequest.updated_at.desc()))
+    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
+    response.headers["X-Total-Count"] = str(total)
+    query = query.order_by(ChangeRequest.updated_at.desc())
+    if limit is not None:
+        query = query.limit(limit).offset(offset)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -240,7 +250,7 @@ async def create_request(
     db.add(req)
     await db.flush()
     for item in body.items:
-        db.add(ChangeRequestItem(request_id=req.id, **item))
+        db.add(ChangeRequestItem(request_id=req.id, **item.model_dump()))
     db.add(RequestHistory(request_id=req.id, from_status=None, to_status=req.status.value, actor_id=user.id))
     await db.commit()
     await db.refresh(req)
@@ -293,11 +303,11 @@ async def update_request(
         req.title = data["title"]
     if "note" in data:
         req.note = data["note"]
-    if "items" in data and data["items"] is not None:
-        _assert_items_allowed(user.role, data["items"])
+    if body.items is not None:
+        _assert_items_allowed(user.role, body.items)
         await db.execute(delete(ChangeRequestItem).where(ChangeRequestItem.request_id == id))
-        for item in data["items"]:
-            db.add(ChangeRequestItem(request_id=id, **item))
+        for item in body.items:
+            db.add(ChangeRequestItem(request_id=id, **item.model_dump()))
     await db.commit()
     await db.refresh(req)
     await log_action(db, user.id, "update_request", "change_request", id)

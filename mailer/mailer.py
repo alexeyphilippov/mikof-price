@@ -22,6 +22,7 @@ SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "1127"))
 SMTP_LOGIN = os.getenv("SMTP_LOGIN", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_CA_FILE = os.getenv("SMTP_CA_FILE", "") or None
 FROM_ADDR = os.getenv("MAIL_FROM", "noreply@mikofai.ru")
 
 
@@ -47,8 +48,9 @@ def send(mail: Mail):
     if mail.html:
         msg.add_alternative(mail.html, subtype="html")
     try:
-        # Провайдер (selcloud) использует самоподписанный сертификат на порту 1127
-        ctx = ssl._create_unverified_context()  # noqa: SLF001
+        # Проверяем цепочку TLS провайдера (валидный Let's Encrypt). При нестандартном
+        # CA провайдера путь можно передать через SMTP_CA_FILE (S3).
+        ctx = ssl.create_default_context(cafile=SMTP_CA_FILE)
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx, timeout=15) as s:
             s.login(SMTP_LOGIN, SMTP_PASSWORD)
             s.send_message(msg)

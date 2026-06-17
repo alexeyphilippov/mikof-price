@@ -32,7 +32,7 @@ async def login(
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    access = create_access_token(user.id, user.role.value)
+    access = create_access_token(user.id, user.role.value, user.token_version)
     raw_refresh, expires = create_refresh_token(user.id)
 
     db.add(RefreshToken(
@@ -41,7 +41,9 @@ async def login(
         expires_at=expires,
     ))
     await db.execute(
-        update(User).where(User.id == user.id).values(last_login=datetime.utcnow())
+        update(User).where(User.id == user.id).values(
+            last_login=datetime.now(timezone.utc).replace(tzinfo=None)
+        )
     )
     await db.commit()
 
@@ -61,19 +63,14 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ):
     if refresh_token:
-        await db.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == hash_token(refresh_token),
-                RefreshToken.user_id == user.id,
-            )
-        )
         rt_res = await db.execute(
             select(RefreshToken).where(RefreshToken.token_hash == hash_token(refresh_token))
         )
         rt = rt_res.scalar_one_or_none()
         if rt:
             rt.revoked = True
-            await db.commit()
+    user.token_version += 1  # отзыв всех ранее выданных access-токенов (S7)
+    await db.commit()
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     response.delete_cookie("XSRF-TOKEN")
@@ -101,7 +98,7 @@ async def refresh(
     user = user_res.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    access = create_access_token(user.id, user.role.value)
+    access = create_access_token(user.id, user.role.value, user.token_version)
     response.set_cookie("access_token", access, httponly=True, samesite="lax", secure=settings.cookie_secure)
     return {"ok": True}
 
