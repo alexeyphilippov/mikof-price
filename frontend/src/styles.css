@@ -51,7 +51,7 @@ h1, h2, h3 { margin: 0 0 0.5em; }
 
 .main { flex: 1; min-width: 0; padding: 28px 36px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
-.topbar .actions { display: flex; gap: 10px; }
+.topbar .actions { display: flex; gap: 10px; align-items: center; }
 
 .card { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
 .grid { display: grid; gap: 16px; }
@@ -95,7 +95,7 @@ button.link:hover { background: transparent; color: var(--brand-dark); }
 button.danger { background: var(--red); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-.pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; display: inline-block; }
+.pill { display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .pill.draft { background: #eef1f6; color: #586174; }
 .pill.pending_cfd, .pill.pending { background: #fef3e2; color: var(--amber); }
 .pill.pending_ceo { background: #e7efff; color: var(--brand); }
