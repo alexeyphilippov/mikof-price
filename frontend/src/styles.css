@@ -51,7 +51,7 @@ h1, h2, h3 { margin: 0 0 0.5em; }
 
 .main { flex: 1; min-width: 0; padding: 28px 36px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
-.topbar .actions { display: flex; gap: 10px; }
+.topbar .actions { display: flex; gap: 10px; align-items: center; }
 
 .card { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
 .grid { display: grid; gap: 16px; }
@@ -95,7 +95,7 @@ button.link:hover { background: transparent; color: var(--brand-dark); }
 button.danger { background: var(--red); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-.pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; display: inline-block; }
+.pill { display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .pill.draft { background: #eef1f6; color: #586174; }
 .pill.pending_cfd, .pill.pending { background: #fef3e2; color: var(--amber); }
 .pill.pending_ceo { background: #e7efff; color: var(--brand); }
@@ -147,7 +147,7 @@ th.sortable:hover { color: var(--ink); }
 .backdrop { display: none; }
 
 /* ── Адаптив: планшеты, iPhone 13 Pro Max (428×926 портрет, 926×428 ландшафт) ── */
-@media (max-width: 960px) {
+@media (max-width: 768px) {
   html, body { overflow-x: clip; }
   .layout { flex-direction: column; align-items: stretch; }
 
@@ -232,3 +232,16 @@ th.sortable:hover { color: var(--ink); }
   .modal { padding: 18px; }
   .row > * { flex-basis: 100%; }
 }
+
+/* Скелетон загрузки (U4) */
+.skeleton { position: relative; overflow: hidden; }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.06), transparent);
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+/* Пагинация списков (E/U2) */
+.pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; justify-content: flex-end; }
+.pager .muted { margin-right: auto; }

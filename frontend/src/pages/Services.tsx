@@ -4,23 +4,32 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Ref, Service, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 
+const PAGE_SIZE = 50;
+
 export default function Services() {
   const { me } = useAuth();
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState("");
+  const [page, setPage] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const canCreate = me!.role === "r1" || me!.role === "r3";
 
   const { data: groups } = useQuery({ queryKey: ["groups"], queryFn: async () => (await api.get<Ref[]>("/api/groups")).data });
-  const { data: services, isLoading } = useQuery({
-    queryKey: ["services", search, group],
+  const { data, isLoading } = useQuery({
+    queryKey: ["services", search, group, page],
     queryFn: async () => {
       const p = new URLSearchParams();
       if (search) p.set("search", search);
       if (group) p.set("group_id", group);
-      return (await api.get<Service[]>(`/api/services?${p}`)).data;
+      p.set("limit", String(PAGE_SIZE));
+      p.set("offset", String(page * PAGE_SIZE));
+      const r = await api.get<Service[]>(`/api/services?${p}`);
+      return { items: r.data, total: Number(r.headers["x-total-count"] ?? r.data.length) };
     },
   });
+  const services = data?.items;
+  const total = data?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <>
@@ -30,8 +39,8 @@ export default function Services() {
       </div>
       {showCreate && <CreateServiceForm onDone={() => setShowCreate(false)} />}
       <div className="toolbar">
-        <input placeholder="Поиск по коду или названию…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select value={group} onChange={(e) => setGroup(e.target.value)}>
+        <input aria-label="Поиск услуг по коду или названию" placeholder="Поиск по коду или названию…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
+        <select aria-label="Фильтр по группе" value={group} onChange={(e) => { setGroup(e.target.value); setPage(0); }}>
           <option value="">Все группы</option>
           {groups?.map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name_ru}</option>)}
         </select>
@@ -52,6 +61,12 @@ export default function Services() {
             ))}
           </tbody>
         </table>
+        <div className="pager">
+          <span className="muted">Найдено: {total}</span>
+          <button className="ghost" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Назад</button>
+          <span className="muted">{page + 1} / {pages}</span>
+          <button className="ghost" disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>Вперёд</button>
+        </div>
       </div>
     </>
   );

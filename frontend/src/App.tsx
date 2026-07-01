@@ -16,9 +16,17 @@ import Users from "./pages/Users";
 import Audit from "./pages/Audit";
 import Profile from "./pages/Profile";
 
+function BootSkeleton() {
+  return (
+    <div className="login-wrap" aria-busy="true" aria-label="Загрузка">
+      <div className="card skeleton" style={{ width: 320, maxWidth: "90vw", height: 200 }} />
+    </div>
+  );
+}
+
 function Guard({ roles, children }: { roles?: Role[]; children: JSX.Element }) {
   const { me, loading } = useAuth();
-  if (loading) return <div className="login-wrap">Загрузка…</div>;
+  if (loading) return <BootSkeleton />;
   if (!me) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(me.role)) return <Navigate to="/" replace />;
   return children;
@@ -26,7 +34,7 @@ function Guard({ roles, children }: { roles?: Role[]; children: JSX.Element }) {
 
 export default function App() {
   const { me, loading } = useAuth();
-  if (loading) return <div className="login-wrap">Загрузка…</div>;
+  if (loading) return <BootSkeleton />;
 
   return (
     <Routes>

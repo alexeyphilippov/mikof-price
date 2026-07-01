@@ -5,19 +5,28 @@ import { api, Package, Ref, Service, STATUS_NAMES } from "../api/client";
 import { useAuth } from "../lib/auth";
 import { submitEntityChange } from "../lib/entityAction";
 
+const PAGE_SIZE = 50;
+
 export default function Packages() {
   const { me } = useAuth();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const canCreate = me!.role !== "r4";
   const { data, isLoading } = useQuery({
-    queryKey: ["packages", search],
+    queryKey: ["packages", search, page],
     queryFn: async () => {
       const p = new URLSearchParams();
       if (search) p.set("search", search);
-      return (await api.get<Package[]>(`/api/packages?${p}`)).data;
+      p.set("limit", String(PAGE_SIZE));
+      p.set("offset", String(page * PAGE_SIZE));
+      const r = await api.get<Package[]>(`/api/packages?${p}`);
+      return { items: r.data, total: Number(r.headers["x-total-count"] ?? r.data.length) };
     },
   });
+  const packages = data?.items;
+  const total = data?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <>
@@ -27,14 +36,14 @@ export default function Packages() {
       </div>
       {showCreate && <CreatePackageForm onDone={() => setShowCreate(false)} />}
       <div className="toolbar">
-        <input placeholder="Поиск по коду или названию…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input aria-label="Поиск пакетов по коду или названию" placeholder="Поиск по коду или названию…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
       </div>
       <div className="card">
         <table>
           <thead><tr><th>Код</th><th>Название</th><th>Цена</th><th>Услуг</th><th>Статус</th></tr></thead>
           <tbody>
             {isLoading && <tr><td colSpan={5} className="muted">Загрузка…</td></tr>}
-            {data?.map((p) => (
+            {packages?.map((p) => (
               <tr key={p.id}>
                 <td><Link to={`/packages/${p.id}`}>{p.code}</Link></td>
                 <td>{p.name_ru}</td>
@@ -45,6 +54,12 @@ export default function Packages() {
             ))}
           </tbody>
         </table>
+        <div className="pager">
+          <span className="muted">Найдено: {total}</span>
+          <button className="ghost" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Назад</button>
+          <span className="muted">{page + 1} / {pages}</span>
+          <button className="ghost" disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>Вперёд</button>
+        </div>
       </div>
     </>
   );

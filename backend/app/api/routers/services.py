@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, or_
 
@@ -27,10 +27,13 @@ async def _chisinau_clinic_id(db: AsyncSession) -> Optional[int]:
 
 @router.get("", response_model=list[ServiceOut])
 async def list_services(
+    response: Response,
     group_id: Optional[int] = Query(None),
     subgroup_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -52,7 +55,12 @@ async def list_services(
         ))
     if filters:
         q = q.where(and_(*filters))
-    res = await db.execute(q.order_by(Service.code))
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    response.headers["X-Total-Count"] = str(total)
+    q = q.order_by(Service.code)
+    if limit is not None:
+        q = q.limit(limit).offset(offset)
+    res = await db.execute(q)
     services = res.scalars().all()
     clinic_id = await _chisinau_clinic_id(db)
     prices: dict[int, float] = {}
